@@ -1,11 +1,11 @@
-use bytes::{Bytes, BytesMut};
-use tokio_util::codec::Decoder;
+mod cache;
+
+use bytes::{Buf, Bytes, BytesMut};
 
 use super::*;
-use crate::framed::BridgeCodec;
 
-const CONNECT_FIXTURE: &[u8] = include_bytes!("../../tests/fixtures/session/connect.bin");
-const CORE_STREAM_FIXTURE: &[u8] = include_bytes!("../../tests/fixtures/session/core_stream.bin");
+const CONNECT_FIXTURE: &[u8] = include_bytes!("../../fixtures/session/connect.bin");
+const CORE_STREAM_FIXTURE: &[u8] = include_bytes!("../../fixtures/session/core_stream.bin");
 
 /// The Go core decodes exactly these Connect bytes.
 #[test]
@@ -34,10 +34,10 @@ fn connect_encoding_matches_the_core_fixture() {
 #[test]
 fn core_stream_fixture_decodes_in_order() {
     let mut wire = BytesMut::from(CORE_STREAM_FIXTURE);
-    let mut codec = BridgeCodec::new();
     let mut messages = Vec::new();
-    while let Some(frame) = codec.decode(&mut wire).unwrap() {
-        messages.push(decode_core_message(frame).unwrap());
+    while !wire.is_empty() {
+        let length = wire.get_u32() as usize;
+        messages.push(decode_core_message(wire.split_to(length).freeze()).unwrap());
     }
     assert!(wire.is_empty());
     let [handoff, pack, batch, transfer] = <[CoreMessage; 4]>::try_from(messages).unwrap();
@@ -74,7 +74,7 @@ fn core_stream_fixture_decodes_in_order() {
         ]
     );
 
-    let mut receiver = HandoffPackReceiver::new(&handoff);
+    let mut receiver = HandoffPackReceiver::new(&handoff, None).unwrap();
     assert!(!receiver.is_complete());
     let CoreMessage::PackData { index, data } = pack else {
         panic!("pack data expected")
@@ -174,7 +174,11 @@ fn handoff_requires_startup_packets_and_known_fields() {
         panic!("handoff expected")
     };
     assert_eq!(handoff.startup, [Bytes::from_static(&[0x0b])]);
-    assert!(HandoffPackReceiver::new(&handoff).is_complete());
+    assert!(
+        HandoffPackReceiver::new(&handoff, None)
+            .unwrap()
+            .is_complete()
+    );
 
     let unknown = br#"{"identity":{"display_name":"a","xuid":"","uuid":""},"client_cache":false,"packs_required":false,"packs":[],"extra":1}"#;
     let mut frame = vec![KIND_HANDOFF];
@@ -204,6 +208,7 @@ fn handoff_with_sizes(sizes: &[u64]) -> SessionHandoff {
                 sub_pack: String::new(),
                 content_key: PackContentKey("secret-key".into()),
                 size,
+                cache: None,
             })
             .collect(),
         startup: Vec::new(),
@@ -214,7 +219,7 @@ fn handoff_with_sizes(sizes: &[u64]) -> SessionHandoff {
 #[test]
 fn pack_receiver_assembles_chunks_in_handoff_order() {
     let handoff = handoff_with_sizes(&[0, 5, 0, 2]);
-    let mut receiver = HandoffPackReceiver::new(&handoff);
+    let mut receiver = HandoffPackReceiver::new(&handoff, None).unwrap();
     assert!(
         receiver.accept(0, b"x").is_err(),
         "an empty archive takes no bytes"
@@ -241,11 +246,16 @@ fn pack_receiver_assembles_chunks_in_handoff_order() {
 #[test]
 fn pack_receiver_rejects_overflow_and_incomplete_archives() {
     let handoff = handoff_with_sizes(&[3]);
-    let mut receiver = HandoffPackReceiver::new(&handoff);
+    let mut receiver = HandoffPackReceiver::new(&handoff, None).unwrap();
     assert!(receiver.accept(0, b"abcd").is_err());
     assert!(receiver.accept(0, b"").is_err());
     receiver.accept(0, b"ab").unwrap();
-    assert!(HandoffPackReceiver::new(&handoff).into_archives().is_err());
+    assert!(
+        HandoffPackReceiver::new(&handoff, None)
+            .unwrap()
+            .into_archives()
+            .is_err()
+    );
     assert!(receiver.into_archives().is_err());
 }
 
@@ -279,4 +289,23 @@ fn bedrock_batches_map_to_batch_frames_both_ways() {
         assert!(batch_frame_from_bedrock(invalid).is_err(), "{invalid:?}");
     }
     assert!(batch_frame_body(&Bytes::from_static(&[KIND_TRANSFER, b'{'])).is_none());
+}
+
+/// Server encoders produce the exact handoff, archive and batch bytes already emitted by Go.
+#[test]
+fn server_encoding_matches_the_core_stream_fixture() {
+    let mut wire = BytesMut::from(CORE_STREAM_FIXTURE);
+    while !wire.is_empty() {
+        let length = wire.get_u32() as usize;
+        let frame = wire.split_to(length).freeze();
+        let message = decode_core_message(frame.clone()).unwrap();
+        assert_eq!(encode_core_message(&message).unwrap(), frame);
+    }
+    assert_eq!(
+        encode_connect(&decode_connect(CONNECT_FIXTURE).unwrap())
+            .unwrap()
+            .as_ref(),
+        CONNECT_FIXTURE
+    );
+    assert!(decode_connect(b"\x01{\"client_data\":null}").is_err());
 }

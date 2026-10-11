@@ -565,6 +565,7 @@ pub(crate) fn login_settings(
                 gameplay::mining::protocol_input_mode(snapshot.input_mode)
             }),
         gui_scale_offset: menu.gui_scale_offset(),
+        resource_pack_cache_dir: Some(menu.layout().resource_pack_cache_dir()),
     }
 }
 

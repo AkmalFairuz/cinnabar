@@ -46,6 +46,7 @@ members = [
     "crates/world",
     "crates/update-manifest",
     "tools/architecture",
+    "tools/bedrock-replay",
     "tools/devtool",
     "tools/dist",
     "tools/jsonui-editor",

@@ -40,6 +40,8 @@ pub struct LoginSettings {
     pub input_mode: PlayerInputMode,
     /// The GUI scale offset from the video settings.
     pub gui_scale_offset: i8,
+    /// Trusted local archive directory, never sent in the upstream login claims.
+    pub resource_pack_cache_dir: Option<std::path::PathBuf>,
 }
 
 impl Default for LoginSettings {
@@ -48,6 +50,7 @@ impl Default for LoginSettings {
             language_code: "en_US".to_owned(),
             input_mode: PlayerInputMode::Mouse,
             gui_scale_offset: 0,
+            resource_pack_cache_dir: None,
         }
     }
 }
@@ -169,13 +172,13 @@ mod tests {
             let id = ClientRandomId::new(value).unwrap();
             for name in ["First", "Second"] {
                 let claims = login_client_data(name, id, None, &LoginSettings::default());
-                let request = bridge::ConnectRequest {
+                let request = crate::session_wire::ConnectRequest {
                     protocol: crate::PROTOCOL_VERSION,
                     target: None,
                     client_cache: false,
                     client_data: claims,
                 };
-                let encoded = bridge::encode_connect(&request).unwrap();
+                let encoded = crate::session_wire::encode_connect(&request).unwrap();
                 let decoded: serde_json::Value = serde_json::from_slice(&encoded[1..]).unwrap();
                 assert_eq!(
                     decoded["client_data"]["ClientRandomId"].as_i64(),
@@ -310,6 +313,7 @@ mod tests {
             language_code: "de_DE".to_owned(),
             input_mode: PlayerInputMode::GamePad,
             gui_scale_offset: -1,
+            ..Default::default()
         };
         let claims = login_client_data("Steve", ClientRandomId::new(-7).unwrap(), None, &settings);
         assert_eq!(claims["GameVersion"], GAME_VERSION);
