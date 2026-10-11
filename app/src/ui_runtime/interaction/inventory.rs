@@ -233,3 +233,42 @@ pub(super) fn scroll_container(
             .insert(view.key.clone(), offset);
     }
 }
+
+/// Syncs `swings` to the movement `authority` before swinging for `tick`, so the later swing
+/// producers' sync this frame keeps the swing rather than resetting it.
+pub(super) fn swing_before_tick(
+    swings: &mut client_interaction::melee::SwingTracker,
+    authority: (u64, u64),
+    completed_tick: u64,
+    effects: &client_interaction::movement::LocalMovementEffectTimeline,
+    item_duration: Option<u32>,
+    tick: u64,
+) -> bool {
+    swings.sync_ticks_for_item(authority, completed_tick, effects, item_duration);
+    swings.try_swing_before_tick(tick, effects.mining_tick(tick, completed_tick).0)
+}
+
+#[cfg(test)]
+mod drop_swing_tests {
+    use client_interaction::{melee::SwingTracker, movement::LocalMovementEffectTimeline};
+
+    /// A drop swing under a new movement authority survives the block-use producer's sync.
+    #[test]
+    fn a_drop_swing_survives_the_next_sync_under_a_new_authority() {
+        let effects = LocalMovementEffectTimeline::default();
+        let mut swings = SwingTracker::default();
+        swings.sync_ticks((1, 0), 4, &effects);
+
+        assert!(super::swing_before_tick(
+            &mut swings,
+            (2, 0),
+            4,
+            &effects,
+            None,
+            5
+        ));
+        swings.sync_ticks_for_item((2, 0), 4, &effects, None);
+
+        assert!(swings.take_started().is_some());
+    }
+}

@@ -336,7 +336,7 @@ pub(crate) fn drive_world_inventory_keys(
         .begin_world_drop(slot, (!control).then_some(1))
         .is_ok()
     {
-        swing.swing();
+        swing.swing(&player_runtime);
     }
 }
 
@@ -360,7 +360,7 @@ pub(crate) struct DropSwing<'w> {
 impl DropSwing<'_> {
     /// Swings the local arm for the tick about to simulate and tells the server, unless a swing
     /// is already running.
-    fn swing(mut self) {
+    fn swing(mut self, player_runtime: &client_state::PlayerRuntime) {
         let (Some(swings), Some(movement), Some(effects), Some(network), Some(client_world)) = (
             self.swings.as_deref_mut(),
             self.movement.as_deref(),
@@ -374,9 +374,16 @@ impl DropSwing<'_> {
         else {
             return;
         };
-        let tick = state.tick.saturating_add(1);
-        let effects = effects.mining_tick(tick, movement.completed_tick()).0;
-        if swings.try_swing_before_tick(tick, effects) {
+        let item_duration = crate::melee::selected_attack_timing(player_runtime, client_world)
+            .and_then(|timing| timing.swing_duration_ticks);
+        if inventory::swing_before_tick(
+            swings,
+            movement.interaction_authority_identity(),
+            movement.completed_tick(),
+            effects,
+            item_duration,
+            state.tick.saturating_add(1),
+        ) {
             let _ = network.send_inventory_packet(protocol::swing_arm_packet(
                 stream.local_player_runtime_id(),
                 protocol::SwingSource::DropItem,
