@@ -724,6 +724,7 @@ pub fn run(args: args::ClientArgs) -> Result<()> {
         .add_systems(Last, crate::frame_pacing::update_frame_pacing);
     #[cfg(target_os = "macos")]
     crate::thread_budget::ThreadBudget::configure_render_thread(&mut app);
+    #[cfg(not(target_arch = "wasm32"))]
     app.add_systems(Update, crate::window_icon::apply);
     app.add_plugins(crate::hud_tools::HudToolsPlugin {
         screenshots_dir,
@@ -948,6 +949,7 @@ pub fn run(args: args::ClientArgs) -> Result<()> {
     crate::enhanced_diagnostics::install(&mut app, diagnostic_budget);
     executor::configure_frame_schedule_executors(&mut app);
     let exit = app.run();
+    #[cfg(not(target_arch = "wasm32"))]
     client_shell::discord_presence::shutdown(&mut app);
     if let Some(mut network) = app
         .world_mut()

@@ -46,7 +46,7 @@ fn merge_entries(view: &mut DressingRoomView, defaults: Vec<DressingRoomCape>) {
     }
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), not(target_arch = "wasm32")))]
 pub fn refresh(layout: &InstallLayout) {
     if default_capes::JAVA_CAPES.is_empty() {
         return;
@@ -130,6 +130,10 @@ pub fn refresh(layout: &InstallLayout) {
         while jobs.join_next().await.is_some() {}
     });
 }
+
+/// Browsers have no install directory to cache downloaded capes in.
+#[cfg(all(not(test), target_arch = "wasm32"))]
+pub fn refresh(_layout: &InstallLayout) {}
 
 fn cache_path(layout: &InstallLayout, hash: &str) -> PathBuf {
     layout

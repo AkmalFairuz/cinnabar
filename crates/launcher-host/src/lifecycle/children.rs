@@ -141,6 +141,11 @@ pub fn install_exit_hooks(flush_logs: fn()) {
             stop_all(Duration::ZERO);
         }
     }));
+    install_signal_exit(flush_logs);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn install_signal_exit(flush_logs: fn()) {
     let installed = ctrlc::try_set_handler(move || {
         stop_all(EXIT_GRACE);
         flush_logs();
@@ -150,6 +155,10 @@ pub fn install_exit_hooks(flush_logs: fn()) {
         tracing::warn!("child processes will not be stopped on SIGINT/SIGTERM: {error}");
     }
 }
+
+/// Browsers deliver no process signals.
+#[cfg(target_arch = "wasm32")]
+fn install_signal_exit(_flush_logs: fn()) {}
 
 impl Spawned {
     /// Returns the tracked child PID for process-lifetime fixtures.
