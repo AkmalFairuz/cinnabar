@@ -91,8 +91,8 @@ impl Binder<'_> {
 
 impl Binder<'_> {
     /// The cells the grid at bind key `grid` builds and the placeholder standing in for the
-    /// others, when the state virtualizes grids and the cell template has a fixed pixel size,
-    /// so a placeholder lays out exactly where its cell would.
+    /// others, when the state virtualizes grids and the cell template has fixed pixel bounds,
+    /// so a placeholder lays out exactly where its cell would, and draws only inside them.
     fn grid_window(
         &mut self,
         grid: u64,
@@ -101,11 +101,17 @@ impl Binder<'_> {
         if !self.state.virtual_grids {
             return None;
         }
-        let size = template.properties.get("size")?;
-        if !size
-            .as_array()
-            .is_some_and(|pair| pair.len() == 2 && pair.iter().all(Value::is_number))
-        {
+        let mut geometry = BTreeMap::new();
+        for key in ["size", "min_size", "max_size"] {
+            match template.properties.get(key) {
+                Some(value) if pixel_pair(value).is_some() => {
+                    geometry.insert(key.to_owned(), value.clone());
+                }
+                None if key != "size" => {}
+                _ => return None,
+            }
+        }
+        if !contains_content(template, cell_size(&geometry)) {
             return None;
         }
         let placeholders = &mut self.state.placeholders;
@@ -120,11 +126,11 @@ impl Binder<'_> {
                     control_type: Some("panel".to_owned()),
                     base: None,
                     unresolved_base: None,
-                    properties: BTreeMap::from([
-                        ("size".to_owned(), size.clone()),
-                        (GRID_PLACEHOLDER_KEY.to_owned(), Value::from(grid)),
-                    ])
-                    .into(),
+                    properties: geometry
+                        .into_iter()
+                        .chain([(GRID_PLACEHOLDER_KEY.to_owned(), Value::from(grid))])
+                        .collect::<BTreeMap<_, _>>()
+                        .into(),
                     children: Vec::new(),
                     factory: None,
                 });
@@ -197,6 +203,62 @@ impl Binder<'_> {
             track: super::reuse::Track::built(Default::default(), false, None, None),
         })
     }
+}
+
+/// A `[w, h]` of plain numbers.
+fn pixel_pair(value: &Value) -> Option<[f64; 2]> {
+    match value.as_array()?.as_slice() {
+        [w, h] => Some([w.as_f64()?, h.as_f64()?]),
+        _ => None,
+    }
+}
+
+/// The cell's `size` within its `min_size`/`max_size`, where an over-large size takes the
+/// maximum even past the minimum, as layout clamps it.
+fn cell_size(geometry: &BTreeMap<String, Value>) -> [f64; 2] {
+    let pair = |key: &str| geometry.get(key).and_then(pixel_pair);
+    let mut size = pair("size").unwrap_or_default();
+    for axis in 0..2 {
+        let (min, max) = (pair("min_size"), pair("max_size"));
+        if let Some(max) = max.filter(|max| max[axis] < size[axis]) {
+            size[axis] = max[axis];
+        } else if let Some(min) = min.filter(|min| size[axis] <= min[axis]) {
+            size[axis] = min[axis];
+        }
+    }
+    size
+}
+
+/// Whether everything `control` draws stays inside its `cell`-sized rect: it clips with no
+/// descendant escaping the clip, or each child sits unshifted and no larger than the cell.
+fn contains_content(control: &ResolvedControl, cell: [f64; 2]) -> bool {
+    let clips = ["clips_children", "clip_children"]
+        .iter()
+        .any(|key| control.properties.get(*key) == Some(&Value::Bool(true)));
+    if clips && !escapes_clip(control) {
+        return true;
+    }
+    control.children.iter().all(|child| {
+        let unshifted = child
+            .properties
+            .get("offset")
+            .is_none_or(|offset| pixel_pair(offset).is_some_and(|offset| offset == [0.0; 2]))
+            && child.properties.get("use_anchored_offset") != Some(&Value::Bool(true))
+            && child.properties.get("anchor_from") == child.properties.get("anchor_to");
+        let fits = child
+            .properties
+            .get("size")
+            .and_then(pixel_pair)
+            .is_none_or(|size| size[0] <= cell[0] && size[1] <= cell[1]);
+        unshifted && fits && contains_content(child, cell)
+    })
+}
+
+/// Whether a descendant opts out of its ancestors' clipping.
+fn escapes_clip(control: &ResolvedControl) -> bool {
+    control.children.iter().any(|child| {
+        crate::widgets::bound_bool(child, "allow_clipping") == Some(false) || escapes_clip(child)
+    })
 }
 
 /// A templated grid's cell count, or `None` when a filling grid's count waits

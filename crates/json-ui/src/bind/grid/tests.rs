@@ -63,24 +63,23 @@ struct Cells(Arc<ResolvedControl>);
 
 impl Cells {
     fn new() -> Self {
-        let label = node(
-            "label",
-            "label",
-            json!({
-                "text": "#text",
-                "bindings": [{
-                    "binding_type": "collection", "binding_collection_name": "items",
-                    "binding_name": "#text"
-                }]
-            }),
-            Vec::new(),
-        );
-        Self(Arc::new(node(
-            "cell",
-            "panel",
-            json!({ "size": [10, 10] }),
-            vec![label],
-        )))
+        Self::with(json!({ "size": [10, 10] }), json!({}))
+    }
+
+    /// A `cell` panel of these properties over a label bound to the item's text, with `label`'s.
+    fn with(cell: Value, label: Value) -> Self {
+        let mut properties = json!({
+            "text": "#text",
+            "bindings": [{
+                "binding_type": "collection", "binding_collection_name": "items",
+                "binding_name": "#text"
+            }]
+        });
+        if let (Value::Object(properties), Value::Object(extra)) = (&mut properties, label) {
+            properties.extend(extra);
+        }
+        let label = node("label", "label", properties, Vec::new());
+        Self(Arc::new(node("cell", "panel", cell, vec![label])))
     }
 }
 
@@ -229,7 +228,36 @@ fn count(control: &ResolvedControl, name: &str) -> usize {
 
 #[test]
 fn a_virtualized_grid_draws_as_one_built_in_full() {
-    let (root, library) = (screen(), Cells::new());
+    draws_as_built_in_full(&Cells::new(), true);
+}
+
+#[test]
+fn placeholders_take_the_cell_size_its_bounds_clamp() {
+    draws_as_built_in_full(
+        &Cells::with(json!({ "size": [10, 10], "min_size": [20, 20] }), json!({})),
+        true,
+    );
+}
+
+#[test]
+fn cells_drawing_outside_their_rect_are_all_built() {
+    // Each label draws six rows above its cell, inside the view while the cell is below it.
+    let upward = json!({ "offset": [0, -60] });
+    draws_as_built_in_full(&Cells::with(json!({ "size": [10, 10] }), upward), false);
+    // A clipping cell keeps its shifted label inside it.
+    draws_as_built_in_full(
+        &Cells::with(
+            json!({ "size": [10, 10], "clips_children": true }),
+            json!({ "offset": [0, -4] }),
+        ),
+        true,
+    );
+}
+
+/// Draws `library`'s cells built in full and virtualized across scrolls and data changes,
+/// asserting they match and that the virtualized grid builds few cells when it `virtualizes`.
+fn draws_as_built_in_full(library: &Cells, virtualizes: bool) {
+    let root = screen();
     let (mut full, mut virtualized) = (Session::new(false), Session::new(true));
     for (prefix, scroll) in [
         ("a", 0.0),
@@ -239,15 +267,19 @@ fn a_virtualized_grid_draws_as_one_built_in_full() {
         ("c", 0.0),
     ] {
         let data = items(prefix);
-        let expected = full.draw(&root, &library, &data, scroll);
-        let drawn = virtualized.draw(&root, &library, &data, scroll);
+        let expected = full.draw(&root, library, &data, scroll);
+        let drawn = virtualized.draw(&root, library, &data, scroll);
         // Every cell, and the template the grid keeps to measure.
         assert_eq!(expected.built, CELLS + 1);
-        assert!(
-            drawn.built < CELLS / 4,
-            "{} cells built at {scroll}",
-            drawn.built
-        );
+        if virtualizes {
+            assert!(
+                drawn.built < CELLS / 4,
+                "{} cells built at {scroll}",
+                drawn.built
+            );
+        } else {
+            assert_eq!(drawn.built, CELLS + 1);
+        }
         assert!(!drawn.nodes.is_empty());
         assert_eq!(drawn.nodes, expected.nodes, "{prefix} at {scroll}");
         assert_eq!(drawn.hits, expected.hits, "{prefix} at {scroll}");
