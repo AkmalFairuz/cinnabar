@@ -414,10 +414,18 @@ impl NativeSheets {
             cancelled: Arc::clone(&self.cancelled),
             done: self.sender.clone(),
         };
-        // Without a worker thread, as in a browser, the decode runs on this frame instead.
-        match worker() {
+        self.dispatch(job, worker());
+    }
+
+    /// Without a worker thread, as in a browser, the decode runs on this frame and stays pending
+    /// until `collect` receives it, so sibling requests wait as they would for a queued job.
+    fn dispatch(&mut self, job: Job, worker: Option<&Sender<Job>>) {
+        match worker {
             Some(worker) => self.submit(worker, job),
-            None => job.run(),
+            None => {
+                self.pending = Some(job.key.clone());
+                job.run();
+            }
         }
     }
 
