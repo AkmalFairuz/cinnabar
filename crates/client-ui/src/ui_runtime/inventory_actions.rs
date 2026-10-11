@@ -528,6 +528,10 @@ impl UiRuntime {
             InventoryCellHit::RecipeBook(index) => {
                 self.recipe_book_click(player_runtime, index, true)
             }
+            // Shift does not stop the close button closing the screen.
+            InventoryCellHit::Widget(Widget::Close) => {
+                self.activate_widget(player_runtime, Widget::Close)
+            }
             hit => match gesture_target(hit) {
                 Some(target) => self
                     .inventory_ledger_mut(player_runtime)
