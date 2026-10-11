@@ -100,6 +100,8 @@ impl WorldStream {
         }
         let mut prepared_batches = Vec::with_capacity(solve_budget);
         let mut selected = HashSet::new();
+        // Queued candidates passed over once only urgent batches may dispatch.
+        let mut over_cap = Vec::new();
         let mut scanned = 0;
         while prepared_batches.len() < solve_budget
             && scanned < MAX_PENDING_SCHEDULER_SCANS_PER_POLL
@@ -146,12 +148,13 @@ impl WorldStream {
                 candidate.startup_class = priority.startup_class;
                 candidate.transfer = priority.transfer;
             }
-            // Beyond the worker cap only urgent batches dispatch; candidates rank urgent first.
+            // Beyond the worker cap only urgent batches dispatch. Transfer work outranks urgent
+            // work, so keep scanning past what cannot use the reserve.
             if prepared_batches.len() >= regular_budget && !candidate.urgent {
                 if queued {
-                    self.lighting.jobs.lanes[0].ready.push(candidate);
+                    over_cap.push(candidate);
                 }
-                break;
+                continue;
             }
             let key = candidate.key;
             let revision = candidate.revision;
@@ -289,6 +292,7 @@ impl WorldStream {
                 .insert(batch_id, batch.len());
             prepared_batches.push(batch);
         }
+        self.lighting.jobs.lanes[0].ready.extend(over_cap);
 
         let dispatched = prepared_batches.iter().map(Vec::len).sum::<usize>();
         self.stats.phase2_stages.light_jobs_dispatched = self
