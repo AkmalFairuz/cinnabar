@@ -7394,6 +7394,33 @@ engine versions remain separate from geometry schema versions. Full native skin-
 import parity, animated imports, persona and Marketplace trust remain incomplete.
 No visual parity or hardware performance gate closes with this extension.
 
+## Keyboard & Mouse command macros
+
+- Keyboard & Mouse settings hold ten command macro slots below every other
+  keybind, each with a "Command Macro N" label, an Unassigned binding button and
+  a command box. The section header matches the shipped wording. A press on a
+  binding button captures one desktop key or mouse button; Alt supplies the
+  modifier when the macro runs, so macro rows are keyboard and mouse only and
+  never join the gamepad layout.
+- Commands persist in settings alongside the bindings, bounded to one outbound
+  chat packet, including the command slash, and free of control characters.
+  Oversized drafts remain editable with an inline error and do not replace the
+  saved command. A slot with a binding but no command stays silent, and an empty
+  command box returns that slot to untouched.
+  A keyboard layout reset clears macro rows while retaining their commands.
+- Alt plus a bound key while playing queues the command as Enter would, consuming
+  that control even if the queue refuses the send, without resetting other held
+  controls or pointer motion. Mouse buttons use the same macro dispatch. A leading
+  slash is added for commands typed without one; macros do nothing while a menu,
+  chat box, inventory, sign editor or emote wheel owns input. Keyboard macros
+  fire once per physical press; consumed controls stay suppressed until release.
+  Clicking or tapping a native command box places its caret at the selected
+  character.
+- Incomplete parity: Bedrock's exact per-slot key names, default bindings and
+  command-box editing affordances are unverified, as is macro behaviour over the
+  JSON-UI settings fallback. Macros run client-side, so a server rejecting the
+  command is indistinguishable from the client's own feedback. No native parity
+  gate closes from these changes.
 
 ### Shipped font grid and coverage (incomplete text parity)
 
