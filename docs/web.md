@@ -21,8 +21,9 @@ The relay serves three endpoints, all on the page's own origin:
 - `/v1/vanilla-pack` streams the pinned sample pack from `assets/vanilla-source.json` without storing
   it, since browsers cannot fetch GitHub release assets cross-origin.
 
-Sessions join addressed RakNet servers only. Every upstream socket, including pre-login transfer hops,
-dials through a dialer that refuses non-public addresses after name resolution. Origins, sessions per
+Sessions join addressed RakNet servers only. Every upstream socket, including pre-login transfer hops
+and the HTTP connections of URL pack downloads and their redirects, dials through a dialer that
+refuses non-public addresses after name resolution. Origins, sessions per
 address, actions per minute and browser upload rate are limited.
 
 ## Settings
