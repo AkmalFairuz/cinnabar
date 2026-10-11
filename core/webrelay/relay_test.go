@@ -311,6 +311,26 @@ func TestPlayJoinsAServerOverWebSockets(t *testing.T) {
 	}
 }
 
+// A play message over the upload bound closes the connection instead of reaching the session.
+func TestPlayRefusesOversizedMessages(t *testing.T) {
+	_, server := startRelay(t, Config{})
+	_, id := openControl(t, server)
+	conn, _, err := dialWS(t, wsURL(server, "/v1/session"), nil, PlayProtocol, sessionProtocolPrefix+id)
+	if err != nil {
+		t.Fatalf("dial play: %v", err)
+	}
+	defer conn.CloseNow()
+	// One well-formed session frame whose message is just over the bound.
+	message := make([]byte, 4+playMessageLimit)
+	binary.BigEndian.PutUint32(message, playMessageLimit)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	go func() { _ = conn.Write(ctx, websocket.MessageBinary, message) }()
+	if _, _, err := conn.Read(ctx); websocket.CloseStatus(err) != websocket.StatusMessageTooBig {
+		t.Fatalf("oversized message: %v, want message-too-big", err)
+	}
+}
+
 func TestPlayRefusesPrivateServers(t *testing.T) {
 	upstream := listenUpstream(t)
 	_, server := startRelay(t, Config{})
