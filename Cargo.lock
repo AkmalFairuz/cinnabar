@@ -3131,12 +3131,10 @@ name = "diagnostics"
 version = "0.1.12"
 dependencies = [
  "assets",
- "bevy",
  "chunk-pipeline",
  "client-ui",
  "libc",
  "meshing",
- "protocol",
  "render-model",
  "rustix 1.1.4",
  "serde",
