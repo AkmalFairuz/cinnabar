@@ -130,19 +130,24 @@ fn join_icon_keys(view: &LayeredPackView) -> Vec<(Arc<str>, Arc<str>)> {
 fn install_join_carriers() {
     if let Some(compiled) = std::env::var_os("CINNABAR_JOIN_CARRIERS") {
         let path = std::path::Path::new(&compiled).join(
-            std::path::Path::new(crate::asset_startup::DEFAULT_ASSET_PATH)
+            std::path::Path::new(assets::carriers::startup::DEFAULT_ASSET_PATH)
                 .file_name()
                 .unwrap(),
         );
-        let loaded =
-            crate::asset_startup::load_runtime_assets(crate::asset_startup::AssetSelection {
+        let mut loaded = assets::carriers::startup::load_runtime_assets(
+            assets::carriers::startup::AssetSelection {
                 path,
-                source: crate::asset_startup::AssetPathSource::CommandLine,
-            })
-            .unwrap();
-        let artwork = crate::asset_startup::actor_artwork(
-            &crate::asset_startup::require_actor_assets(&loaded.selected_path, &loaded.entities)
-                .unwrap(),
+                source: assets::carriers::startup::AssetPathSource::CommandLine,
+            },
+        )
+        .unwrap();
+        crate::asset_bindings::install_world_sidecars(&mut loaded);
+        let artwork = crate::asset_bindings::actor_artwork(
+            &assets::carriers::startup::require_actor_assets(
+                &loaded.selected_path,
+                &loaded.entities,
+            )
+            .unwrap(),
             loaded.entities.runtime(),
         );
         super::super::set_vanilla_item_paths(loaded.entities.runtime());
