@@ -74,7 +74,7 @@ impl WorldStream {
         let mut dirty = preexpanded_dirty.into_iter().collect::<BTreeSet<_>>();
         for &key in &sources {
             let reached = |dependent: &SubChunkKey| {
-                reach.reaches([
+                reach.mesh_reaches([
                     i64::from(dependent.x) - i64::from(key.x),
                     i64::from(dependent.y) - i64::from(key.y),
                     i64::from(dependent.z) - i64::from(key.z),
