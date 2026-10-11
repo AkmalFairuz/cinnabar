@@ -4,7 +4,10 @@ use protocol::{
     ActorEvent, ActorKind, ActorMetadata, ActorMetadataUpdateEvent, ActorMetadataValue,
 };
 
-use super::{ActorStore, NAMETAG_METADATA_KEY, SCALE_METADATA_KEY, tests::spawn};
+use super::{
+    ActorStore, NAMETAG_METADATA_KEY, SCALE_METADATA_KEY,
+    tests::{entity_spawn, network_move, spawn},
+};
 
 #[test]
 fn zero_scale_nametag_host_retains_its_authoritative_scale_and_name() {
@@ -59,5 +62,42 @@ fn zero_scale_nametag_host_retains_its_authoritative_scale_and_name() {
         );
         assert_eq!(store.get(8).unwrap().render_scale(), expected);
         assert_eq!(store.actor_name_tag(80), Some(Arc::from("Game mode")));
+    }
+}
+
+#[test]
+fn falling_block_network_offsets_follow_their_scaled_box() {
+    let metadata = |height: f32, scale: f32| -> Arc<[ActorMetadata]> {
+        Arc::from([
+            ActorMetadata {
+                key: super::BOUNDING_BOX_HEIGHT_METADATA_KEY,
+                value: ActorMetadataValue::Float(height),
+            },
+            ActorMetadata {
+                key: SCALE_METADATA_KEY,
+                value: ActorMetadataValue::Float(scale),
+            },
+        ])
+    };
+    // The vanilla box keeps its half-block offset; text hosts stay where the server put them.
+    for (height, scale, sent, feet) in [
+        (0.98, 1.0, 64.5, 64.0),
+        (0.98, 0.000_000_1, 64.0, 64.0),
+        (0.0, 1.0, 64.0, 64.0),
+    ] {
+        let mut store = ActorStore::new(1, 0);
+        let ActorEvent::Spawn(mut event) =
+            entity_spawn(40, -40, "minecraft:falling_block", metadata(height, scale))
+        else {
+            unreachable!()
+        };
+        event.position[1] = sent;
+        store.apply(1, 1, ActorEvent::Spawn(event));
+        assert!(
+            (store.get(40).unwrap().position[1] - feet).abs() < 1e-5,
+            "height {height} at scale {scale}"
+        );
+        store.apply(1, 2, network_move(40, sent, true));
+        assert!((store.get(40).unwrap().position[1] - feet).abs() < 1e-5);
     }
 }
