@@ -7688,6 +7688,18 @@ Composters retain inward walls and a level-dependent floor. Cauldrons retain the
 
 Incomplete parity: cauldron block-actor potion and dyed-water colours require runtime block-actor data; their state-only visual remains provisional. Enhanced lighting and performance acceptance remain open.
 
+### Compiled furnace fuel admission (incomplete)
+
+Furnace quick-move fuel decisions use numeric registry facts and validated compiled inputs.
+Retained retail compatibility eligibility and log ingredient preference remain provisional;
+the complete native fuel inventory and durations are unverified. Missing, malformed and
+unsupported component declarations stay unresolved. Unknown and explicitly nonfuel items
+are deferred to the player inventory rather than guessed into a furnace cell. Committed furnace
+recipe inputs are bound by numeric IDs, tags and metadata during admission.
+Session duration conversion and complete native recipe precedence remain unverified.
+Other container slot rules remain incomplete; this change
+does not close those gates.
+
 Block destroy facts are compiled into world carrier 15 and read by numeric runtime
 identity during mining. Every input state is checked against the independent pinned
 registry; changed or custom identities remain unresolved. The existing hardness and
