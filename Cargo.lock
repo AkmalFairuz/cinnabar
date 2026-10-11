@@ -681,6 +681,7 @@ dependencies = [
  "client-audio",
  "client-presentation",
  "client-session",
+ "client-state",
  "client-ui",
  "client-world",
  "crossbeam-channel",
@@ -2323,6 +2324,16 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "world",
+]
+
+[[package]]
+name = "client-state"
+version = "0.1.12"
+dependencies = [
+ "bevy",
+ "player-state",
+ "semantic-input",
+ "ui",
 ]
 
 [[package]]

@@ -36,7 +36,6 @@ mod named_audio;
 
 mod particles;
 mod pick_block;
-pub mod player_runtime;
 mod player_skin;
 mod present_mode;
 mod primitive_shapes;
