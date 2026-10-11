@@ -174,9 +174,9 @@ impl BindState {
     /// the rest as empty placeholders of its cell template's size. After each layout, pass its
     /// report to [`Self::show_grid_cells`] and bind and lay out again while that returns `true`.
     ///
-    /// Only for a grid whose cells have a literal pixel size, draw less than a cell beyond their
-    /// rect, and read through `once` bindings only what stays fixed per index: a cell built late
-    /// must match one built with the grid.
+    /// Only for a grid whose cells have a literal pixel size, draw less than a view's extent past
+    /// their rect, and read through `once` bindings only what stays fixed per index: a cell built
+    /// late must match one built with the grid.
     pub fn virtualize_grid(&mut self, collection: &str) {
         self.virtual_grids.insert(collection.to_owned());
     }

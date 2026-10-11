@@ -242,17 +242,20 @@ fn placeholders_take_the_cell_size_its_bounds_clamp() {
     );
 }
 
-/// Like a recipe book slot: a shifted label and a selection frame a few pixels past the cell.
+/// A selection frame past the cell, as on a recipe book slot, or a label shifted rows up, as
+/// a server pack's cell may draw, still shows from cells just outside the view.
 #[test]
-fn cells_drawing_just_past_their_rect_virtualize() {
-    draws_as_built_in_full(
-        &Cells::with(
-            json!({ "size": [10, 10] }),
-            json!({ "offset": [0, -4], "size": ["100% + 5px", "100% + 5px"] }),
-        ),
-        "items",
-        true,
-    );
+fn cells_drawing_past_their_rect_virtualize() {
+    for label in [
+        json!({ "offset": [0, -4], "size": ["100% + 5px", "100% + 5px"] }),
+        json!({ "offset": [0, -30] }),
+    ] {
+        draws_as_built_in_full(
+            &Cells::with(json!({ "size": [10, 10] }), label),
+            "items",
+            true,
+        );
+    }
 }
 
 /// Cells a late build could not reproduce exactly stay fully built unless their grid opts in.
@@ -300,7 +303,7 @@ fn draws_as_built_in_full(library: &Cells, opted: &str, virtualizes: bool) {
         assert_eq!(expected.built, CELLS + 1);
         if virtualizes {
             assert!(
-                drawn.built < CELLS / 4,
+                drawn.built < CELLS / 2,
                 "{} cells built at {scroll}",
                 drawn.built
             );
