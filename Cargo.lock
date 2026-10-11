@@ -37,6 +37,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 2.0.18",
+ "web-time",
  "world",
 ]
 
@@ -444,6 +445,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "tokio",
+ "web-time",
  "world",
 ]
 
@@ -463,6 +465,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
+ "web-time",
  "windows-sys 0.61.2",
  "zip",
 ]
@@ -543,6 +546,18 @@ dependencies = [
  "event-listener",
  "event-listener-strategy",
  "pin-project-lite",
+]
+
+[[package]]
+name = "async-platform"
+version = "0.1.12"
+dependencies = [
+ "futures",
+ "js-sys",
+ "rayon",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -675,6 +690,7 @@ dependencies = [
  "acceptance",
  "anyhow",
  "assets",
+ "async-platform",
  "bevy",
  "block-transform",
  "bridge",
@@ -691,6 +707,7 @@ dependencies = [
  "client-ui",
  "client-world",
  "crossbeam-channel",
+ "ctrlc",
  "developer-control",
  "diagnostics",
  "experience-sdk",
@@ -700,6 +717,7 @@ dependencies = [
  "glam",
  "image",
  "inventory 0.1.12",
+ "js-sys",
  "json-ui",
  "launcher",
  "launcher-host",
@@ -738,6 +756,10 @@ dependencies = [
  "tracing-tracy",
  "ui",
  "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
  "wgpu",
  "windows-sys 0.61.2",
  "winit",
@@ -1911,9 +1933,12 @@ name = "bridge"
 version = "0.1.12"
 dependencies = [
  "anyhow",
+ "async-platform",
  "bytes",
  "futures",
+ "js-sys",
  "rustix 1.1.4",
+ "send_wrapper",
  "serde",
  "serde_json",
  "sha2",
@@ -1923,6 +1948,9 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "wasm-bindgen",
+ "web-sys",
+ "web-time",
 ]
 
 [[package]]
@@ -2117,6 +2145,7 @@ name = "chunk-pipeline"
 version = "0.1.12"
 dependencies = [
  "assets",
+ "async-platform",
  "bytes",
  "client-world",
  "criterion",
@@ -2132,6 +2161,7 @@ dependencies = [
  "test-time",
  "thiserror 2.0.18",
  "tracing",
+ "web-time",
  "windows-sys 0.61.2",
  "world",
 ]
@@ -2190,6 +2220,7 @@ dependencies = [
  "serde",
  "serde_json",
  "test-time",
+ "web-time",
 ]
 
 [[package]]
@@ -2259,12 +2290,15 @@ version = "0.1.12"
 dependencies = [
  "anyhow",
  "assets",
+ "async-platform",
  "bevy",
  "chunk-pipeline",
  "client-ui",
  "client-world",
+ "cpal",
  "crossbeam-queue",
  "inventory 0.1.12",
+ "js-sys",
  "particles",
  "player-state",
  "protocol",
@@ -2275,6 +2309,10 @@ dependencies = [
  "sha2",
  "sim",
  "test-time",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
  "windows-sys 0.61.2",
  "world",
  "zip",
@@ -2360,6 +2398,7 @@ dependencies = [
  "sim",
  "thiserror 2.0.18",
  "ui",
+ "web-time",
  "world",
  "zip",
 ]
@@ -2369,6 +2408,7 @@ name = "client-runtime"
 version = "0.1.12"
 dependencies = [
  "anyhow",
+ "async-platform",
  "bevy",
  "bridge",
  "chunk-pipeline",
@@ -2384,12 +2424,15 @@ dependencies = [
  "render",
  "render-api",
  "tokio",
+ "web-sys",
+ "web-time",
 ]
 
 [[package]]
 name = "client-session"
 version = "0.1.12"
 dependencies = [
+ "async-platform",
  "bridge",
  "bytes",
  "crossbeam-channel",
@@ -2401,6 +2444,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "web-time",
  "world",
 ]
 
@@ -2420,6 +2464,7 @@ dependencies = [
  "crossbeam-channel",
  "developer-control",
  "image",
+ "js-sys",
  "json-ui",
  "launcher",
  "launcher-host",
@@ -2442,6 +2487,10 @@ dependencies = [
  "test-time",
  "tokio",
  "ui",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
  "wgpu",
  "zip",
 ]
@@ -2464,6 +2513,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "assets",
+ "async-platform",
  "bevy",
  "bridge",
  "chunk-pipeline",
@@ -2494,6 +2544,7 @@ dependencies = [
  "tokio",
  "ui",
  "url",
+ "web-time",
  "world",
  "zip",
 ]
@@ -2503,6 +2554,7 @@ name = "client-world"
 version = "0.1.12"
 dependencies = [
  "assets",
+ "async-platform",
  "bytes",
  "hashbrown 0.16.1",
  "protocol",
@@ -2513,6 +2565,7 @@ dependencies = [
  "test-time",
  "thiserror 2.0.18",
  "tracing",
+ "web-time",
  "world",
 ]
 
@@ -3139,6 +3192,7 @@ dependencies = [
  "rustix 1.1.4",
  "serde",
  "serde_json",
+ "web-time",
  "windows-sys 0.61.2",
  "world",
 ]
@@ -3469,6 +3523,7 @@ dependencies = [
  "toml 0.9.12+spec-1.1.0",
  "wasmtime",
  "wat",
+ "web-time",
  "wit-component",
 ]
 
@@ -3764,6 +3819,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "web-time",
  "world",
 ]
 
@@ -4517,6 +4573,7 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "aes-gcm",
+ "async-platform",
  "base64",
  "bytes",
  "ctr",
@@ -4536,6 +4593,7 @@ dependencies = [
  "tracing",
  "uuid",
  "valentine",
+ "web-time",
  "zeroize",
 ]
 
@@ -4557,6 +4615,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "web-time",
 ]
 
 [[package]]
@@ -4632,6 +4691,7 @@ dependencies = [
  "sha2",
  "thiserror 2.0.18",
  "ui",
+ "web-time",
  "zip",
 ]
 
@@ -4661,6 +4721,8 @@ dependencies = [
  "tracing",
  "update-manifest",
  "url",
+ "web-sys",
+ "web-time",
  "windows-sys 0.61.2",
  "zbus",
 ]
@@ -5035,6 +5097,7 @@ dependencies = [
  "ui",
  "wasmtime",
  "wat",
+ "web-time",
  "wit-component",
 ]
 
@@ -5773,6 +5836,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror 2.0.18",
+ "web-time",
 ]
 
 [[package]]
@@ -5841,6 +5905,7 @@ dependencies = [
  "assets",
  "bytemuck",
  "serde_json",
+ "web-time",
 ]
 
 [[package]]
@@ -6133,6 +6198,7 @@ version = "0.1.12"
 dependencies = [
  "aes",
  "anyhow",
+ "async-platform",
  "base64",
  "block-transform",
  "bridge",
@@ -6156,6 +6222,7 @@ dependencies = [
  "tokio",
  "uuid",
  "valentine",
+ "web-time",
  "xxhash-rust",
  "zeroize",
 ]
@@ -6503,6 +6570,7 @@ name = "render"
 version = "0.1.12"
 dependencies = [
  "assets",
+ "async-platform",
  "bevy",
  "block-transform",
  "bytemuck",
@@ -6523,6 +6591,7 @@ dependencies = [
  "tempfile",
  "test-time",
  "tracy-client",
+ "web-time",
  "wesl",
  "wgpu",
  "windows-sys 0.61.2",
@@ -6547,6 +6616,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "tracing",
+ "web-time",
  "world",
 ]
 
@@ -6635,6 +6705,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tracing",
+ "web-time",
  "windows-sys 0.61.2",
 ]
 
@@ -6958,6 +7029,7 @@ dependencies = [
  "test-time",
  "tokio",
  "url",
+ "web-time",
  "zip",
 ]
 
@@ -9533,6 +9605,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 2.0.18",
+ "web-time",
 ]
 
 [[package]]

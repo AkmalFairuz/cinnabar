@@ -4,8 +4,8 @@ use client_shell::menu::test_support as menu_fixture;
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
+use web_time::{SystemTime, UNIX_EPOCH};
 
 use bevy::prelude::{App, Update};
 
@@ -238,7 +238,7 @@ fn a_join_frame_does_not_wait_for_the_core() {
     app.world_mut()
         .resource_mut::<MenuRuntime>()
         .request_connect("127.0.0.1:19132".to_owned());
-    let started = std::time::Instant::now();
+    let started = web_time::Instant::now();
     app.update();
     app.update();
     let frames = started.elapsed();

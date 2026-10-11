@@ -8,8 +8,9 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
+use web_time::Instant;
 
 use bridge::{
     self, Account, AuthState as CoreAuth, ConnectProgress, ConnectStage, FeaturedServer, Friend,
@@ -678,8 +679,8 @@ impl AccountControl for LauncherAccount {
 
     fn home(&mut self) -> Option<MenuHome> {
         let home = self.with(|snapshot| snapshot.home.take())?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let now = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map_or(0, |elapsed| elapsed.as_secs() as i64);
         Some(menu_home(&home, now))
     }

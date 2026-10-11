@@ -2,7 +2,7 @@
 use crate::acceptance::AcceptanceRun;
 #[cfg(feature = "acceptance")]
 use ::acceptance::AcceptanceRun;
-use std::time::Instant;
+use web_time::Instant;
 
 use bevy::{
     prelude::{EulerRot, Local, Res, ResMut, Time, Vec3},

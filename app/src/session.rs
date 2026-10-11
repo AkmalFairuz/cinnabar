@@ -35,7 +35,8 @@ use {
     client_state::PlayerRuntime,
 };
 
-use std::{path::PathBuf, time::Instant};
+use std::path::PathBuf;
+use web_time::Instant;
 
 mod client_id;
 

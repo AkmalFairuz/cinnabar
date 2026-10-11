@@ -1,8 +1,8 @@
 use std::{
     collections::{BTreeSet, VecDeque},
     sync::{Arc, Mutex},
-    time::Instant,
 };
+use web_time::Instant;
 
 use bevy::prelude::Resource;
 

@@ -522,9 +522,10 @@ async fn startup_write_failure<T: Transport>(
     write_error: JolyneError,
     remaining: std::time::Duration,
 ) -> JolyneError {
-    let deadline = tokio::time::Instant::now() + remaining;
+    let deadline = web_time::Instant::now() + remaining;
     loop {
-        match tokio::time::timeout_at(deadline, recv_login_packet(transport)).await {
+        let left = deadline.saturating_duration_since(web_time::Instant::now());
+        match async_platform::timeout(left, recv_login_packet(transport)).await {
             Ok(Err(error @ JolyneError::Protocol(ProtocolError::ServerTransfer(_)))) => {
                 return error;
             }

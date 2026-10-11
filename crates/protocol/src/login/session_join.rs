@@ -86,12 +86,13 @@ async fn receive_handoff(
         message => return Err(join_ended(message)),
     };
     let cache_root = cache_root.map(Path::to_path_buf);
-    let (handoff, receiver) = tokio::task::spawn_blocking(move || {
+    let (handoff, receiver) = async_platform::run_blocking(move || {
         let receiver = HandoffPackReceiver::new(&handoff, cache_root.as_deref());
         (handoff, receiver)
     })
     .await
-    .map_err(|_| unexpected("cache archive reader failed"))?;
+    .and_then(Result::ok)
+    .ok_or_else(|| unexpected("cache archive reader failed"))?;
     let mut receiver = receiver.map_err(bridge_error)?;
     while !receiver.is_complete() {
         match next_message(reader).await? {

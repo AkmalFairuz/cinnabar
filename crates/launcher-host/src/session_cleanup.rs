@@ -36,8 +36,9 @@ use std::{
     path::{Path, PathBuf},
     process,
     sync::{Arc, Mutex, OnceLock, Weak},
-    time::{SystemTime, UNIX_EPOCH},
 };
+// File times are std's clock, which this native-only cleanup compares against.
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

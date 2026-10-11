@@ -17,10 +17,8 @@ use {
     client_state::ClientFrameSet,
     client_ui::ui_runtime::{UiRuntime, presentation::UiPresentationRuntime},
     mod_host::{ModGrants, ModHost},
-    std::{
-        path::Path,
-        time::{Duration, Instant},
-    },
+    std::{path::Path, time::Duration},
+    web_time::Instant,
 };
 
 const COMPONENT_ENV: &str = "CINNABAR_MOD_COMPONENT";

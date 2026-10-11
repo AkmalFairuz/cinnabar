@@ -189,7 +189,7 @@ pub struct MenuRuntime {
     settings_scale_picker: bool,
     settings_dirty: bool,
     /// Failed writes wait until this deadline while retaining the newest edits.
-    settings_retry_at: Option<std::time::Instant>,
+    settings_retry_at: Option<web_time::Instant>,
     settings_apply: bool,
     /// In-memory option overrides (index, persisted value) that saves never write.
     session_overrides: Vec<(usize, i32)>,

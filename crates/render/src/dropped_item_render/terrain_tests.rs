@@ -17,7 +17,8 @@ use bevy::{
 use meshing::{ChunkBiomeTintIdentity, ChunkMesh, PackedBiomeRecord};
 use render_api::{PublicationAllowance, PublicationServiceConfig};
 use render_model::DroppedItemSprite;
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
+use web_time::Instant;
 use world::SubChunkKey;
 
 #[derive(Resource, Default)]

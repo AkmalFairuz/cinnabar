@@ -8,7 +8,7 @@ pub(crate) struct LoadTimes(std::sync::Mutex<Vec<(&'static str, std::time::Durat
 impl LoadTimes {
     /// Times one load while preserving its result and panic behavior.
     pub(crate) fn time<T>(&self, carrier: &'static str, load: impl FnOnce() -> T) -> T {
-        let start = std::time::Instant::now();
+        let start = web_time::Instant::now();
         let value = load();
         self.0
             .lock()

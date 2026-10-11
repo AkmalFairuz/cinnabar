@@ -29,8 +29,9 @@ use render_model::{
 use std::{
     path::Path,
     sync::{Arc, mpsc},
-    time::{Duration, Instant},
+    time::Duration,
 };
+use web_time::Instant;
 use world::{ChunkKey, LightSolveError, SubChunkKey};
 
 fn actor_snapshot(spawn: protocol::ActorSpawnEvent) -> client_world::ActorSnapshot {

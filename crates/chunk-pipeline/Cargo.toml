@@ -11,6 +11,8 @@ publication-test-support = []
 benchmark-support = []
 
 [dependencies]
+async-platform = { path = "../async-platform" }
+web-time.workspace = true
 render-api = { path = "../render-api" }
 assets = { path = "../assets" }
 crossbeam-channel = "0.5"

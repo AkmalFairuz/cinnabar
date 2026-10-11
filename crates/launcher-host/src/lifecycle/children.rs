@@ -6,8 +6,9 @@ use std::{
     process::{Child, ChildStdout, Command, ExitStatus},
     sync::{Arc, Mutex, MutexGuard, PoisonError},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
+use web_time::Instant;
 
 /// Tells a spawned core which PID to outlive; bedrock-core's `lifeline.ParentEnv` reads it.
 const PARENT_ENV: &str = "BEDROCK_CORE_PARENT_PID";

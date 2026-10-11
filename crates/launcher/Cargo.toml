@@ -9,6 +9,7 @@ publish = false
 test-support = []
 
 [dependencies]
+web-time.workspace = true
 bridge = { path = "../bridge" }
 assets = { path = "../assets" }
 render-api = { path = "../render-api" }

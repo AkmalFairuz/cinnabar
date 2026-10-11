@@ -31,6 +31,7 @@ pub use account::{
     list_featured_servers_with_counts, list_friends, list_people, list_realms, ping_servers,
     poll_events, profile, realm_membership, report_message_event, sign_out,
 };
+#[cfg(not(target_arch = "wasm32"))]
 pub use endpoint::listener::SessionListener;
 pub use error::BridgeError;
 pub use framed::FramedStream;

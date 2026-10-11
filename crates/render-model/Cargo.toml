@@ -9,6 +9,7 @@ publish = false
 enhanced-diagnostics = []
 
 [dependencies]
+web-time.workspace = true
 image.workspace = true
 tracing.workspace = true
 assets = { path = "../assets" }

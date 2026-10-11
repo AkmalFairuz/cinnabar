@@ -81,7 +81,7 @@ impl Lighting {
             std::mem::take(last_dispatched_batch),
             std::mem::take(waiters),
         );
-        rayon::spawn(move || drop(retired));
+        async_platform::spawn_pooled(move || drop(retired));
     }
 
     /// Forgets one source in every index without invalidating dependent meshes; stale scan

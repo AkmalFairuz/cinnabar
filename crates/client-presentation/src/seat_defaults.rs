@@ -173,9 +173,9 @@ mod tests {
         *GATE.lock().unwrap() = Some(gate);
         assert_eq!(LAYOUTS.get(read), None, "the frame does not wait");
         release.send(()).unwrap();
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let deadline = web_time::Instant::now() + std::time::Duration::from_secs(10);
         while LAYOUTS.get(read).is_none() {
-            assert!(std::time::Instant::now() < deadline, "the reader finishes");
+            assert!(web_time::Instant::now() < deadline, "the reader finishes");
             std::thread::yield_now();
         }
         assert_eq!(LAYOUTS.get(read), Some(&7));

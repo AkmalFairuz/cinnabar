@@ -50,6 +50,7 @@ mod thread_budget;
 #[cfg(feature = "tracy")]
 mod tracy;
 pub mod ui_runtime;
+#[cfg(not(target_arch = "wasm32"))]
 mod window_icon;
 
 mod acceptance;

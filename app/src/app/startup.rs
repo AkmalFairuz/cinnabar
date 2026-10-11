@@ -16,7 +16,8 @@ use assets::{
 use client_interaction::movement::PhysicsCollisionRegistries;
 use launcher_host::session_cleanup::ScopedSessionDirectory;
 use sha2::{Digest, Sha256};
-use std::{fs, path::Path, sync::Arc, time::Instant};
+use std::{fs, path::Path, sync::Arc};
+use web_time::Instant;
 
 /// Every carrier startup reads, each read and decoded exactly once. Results are checked by the
 /// caller in the serial order startup always used, so the first failure reported never changes.
@@ -268,8 +269,8 @@ mod carrier_tests {
             let path = std::env::temp_dir().join(format!(
                 "startup-carriers-{label}-{}-{}",
                 std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
+                web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
                     .unwrap()
                     .as_nanos()
             ));

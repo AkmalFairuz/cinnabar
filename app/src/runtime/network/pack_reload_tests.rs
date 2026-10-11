@@ -12,8 +12,9 @@ use resource_pack::ValidatedPackStack;
 use std::{
     io::{Cursor, Write},
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
+use web_time::Instant;
 
 /// Builds original test data into the same archive admission path used at runtime.
 pub(super) fn stack(files: &[(&str, &[u8])]) -> Arc<ValidatedPackStack> {

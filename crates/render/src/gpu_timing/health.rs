@@ -2,7 +2,8 @@
 
 use super::readback::{SpanValidity, span_validity};
 use crate::RuntimeStage;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 struct StageHealth {

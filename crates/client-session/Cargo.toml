@@ -9,8 +9,10 @@ publish = false
 test-support = []
 
 [dependencies]
-bridge = { path = "../bridge" }
+web-time.workspace = true
+async-platform = { path = "../async-platform" }
 crossbeam-channel = "0.5"
+bridge = { path = "../bridge" }
 bytes.workspace = true
 protocol = { path = "../protocol" }
 server-experience = { path = "../server-experience" }
@@ -19,6 +21,9 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 world = { path = "../world" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["fs", "net", "rt-multi-thread"] }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["fmt"] }

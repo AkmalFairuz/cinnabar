@@ -14,6 +14,8 @@ enhanced = []
 enhanced-diagnostics = ["enhanced", "render-model/enhanced-diagnostics"]
 
 [dependencies]
+async-platform = { path = "../async-platform" }
+web-time.workspace = true
 block-transform = { path = "../block-transform" }
 tracy-client = { version = "=0.19.0", default-features = false, features = ["enable", "only-localhost", "ondemand"], optional = true }
 mod-api = { path = "../mod-api" }

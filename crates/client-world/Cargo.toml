@@ -6,6 +6,8 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+async-platform = { path = "../async-platform" }
+web-time.workspace = true
 render-api = { path = "../render-api" }
 assets = { path = "../assets" }
 bytes.workspace = true

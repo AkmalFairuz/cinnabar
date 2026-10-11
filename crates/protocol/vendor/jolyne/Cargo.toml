@@ -20,6 +20,8 @@ discovery = ["nethernet"]
 xbox-signaling = ["nethernet"]
 
 [dependencies]
+async-platform = { path = "../../../async-platform" }
+web-time = "1.1"
 tokio = { version = "1.48", default-features = false, features = ["rt", "sync", "time"] }
 bytes = "1.11"
 thiserror = "1.0"

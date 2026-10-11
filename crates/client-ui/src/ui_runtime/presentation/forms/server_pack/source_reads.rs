@@ -26,6 +26,24 @@ enum Input {
     Local(PathBuf, String),
 }
 
+impl Job {
+    /// Reads the image unless its owner has gone, and publishes the result to that owner.
+    fn run(self) {
+        if self.cancelled.load(Ordering::Acquire) {
+            return;
+        }
+        let source = match &self.input {
+            Input::Archive(view, path) => super::read_source(view, &self.key, path, self.limit),
+            Input::Local(root, relative) => {
+                super::local_sources::read(root, relative, self.limit, false).0
+            }
+        };
+        if !self.cancelled.load(Ordering::Acquire) {
+            let _ = self.done.try_send((self.key, source));
+        }
+    }
+}
+
 /// One image read and one queued input bound file IO, inflation and decryption process-wide.
 fn worker() -> Option<&'static Sender<Job>> {
     static WORKER: OnceLock<Option<Sender<Job>>> = OnceLock::new();
@@ -36,20 +54,7 @@ fn worker() -> Option<&'static Sender<Job>> {
                 .name("ui-image-sources".into())
                 .spawn(move || {
                     while let Ok(job) = receiver.recv() {
-                        if job.cancelled.load(Ordering::Acquire) {
-                            continue;
-                        }
-                        let source = match &job.input {
-                            Input::Archive(view, path) => {
-                                super::read_source(view, &job.key, path, job.limit)
-                            }
-                            Input::Local(root, relative) => {
-                                super::local_sources::read(root, relative, job.limit, false).0
-                            }
-                        };
-                        if !job.cancelled.load(Ordering::Acquire) {
-                            let _ = job.done.try_send((job.key, source));
-                        }
+                        job.run();
                     }
                 })
                 .ok()?;
@@ -151,10 +156,11 @@ impl SourceReads {
         Self::submit_to(state, job, worker());
     }
 
-    /// Applies queue backpressure without losing the pack's requested key.
+    /// Applies queue backpressure without losing the pack's requested key. Without a worker
+    /// thread, as in a browser, the read runs on the caller's frame instead.
     fn submit_to(state: &mut State, job: Job, worker: Option<&Sender<Job>>) {
         let Some(worker) = worker else {
-            let _ = job.done.try_send((job.key, None));
+            job.run();
             return;
         };
         let key = job.key.clone();

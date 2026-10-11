@@ -36,6 +36,10 @@ and report explicit editor capability and connection intent for normal gameplay.
 Jolyne's login retains client-authored geometry, resource patches and minimum engine
 versions. Uploads without explicit geometry select the classic or slim resource patch.
 
+Jolyne's drain after a failed startup write times out through Cinnabar's
+`async-platform`, Tokio's timer on native and the browser's on WebAssembly, so a
+browser session reports the server's disconnect instead of panicking.
+
 `DisconnectPacket` is hand-patched after generation to read
 `hide_disconnection_screen` and skip both message strings when it is set, as
 gophertunnel's `Disconnect.Marshal` does; the manifest still lacks that

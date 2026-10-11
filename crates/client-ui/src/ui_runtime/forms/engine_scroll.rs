@@ -3,7 +3,7 @@
 //! centring on the press, a draggable box, and a gesture-enabled touch pan
 //! with its fling stepped every frame.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use bevy::input::mouse::MouseScrollUnit;
 use json_ui::{Draggable, HitKind, HitRegion, ScrollMetrics};

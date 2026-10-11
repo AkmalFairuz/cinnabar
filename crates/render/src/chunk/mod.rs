@@ -5,8 +5,8 @@ use std::{
         Arc, Mutex,
         mpsc::{Receiver, SyncSender, sync_channel},
     },
-    time::{Duration, Instant},
 };
+use web_time::{Duration, Instant};
 
 use assets::{
     ANIMATION_FLAG_BLEND, Animation, Material, ModelTemplate, NO_ANIMATION, ResolvedBiomeTints,
