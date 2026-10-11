@@ -6,7 +6,9 @@ use bevy::{
     prelude::{Transform, Vec3},
 };
 use chunk_pipeline::ViewCohortStatus;
-use render::{ChunkRenderQueue, PresentedFrameAck, PresentedFrameGate, TargetRenderExpectation};
+use render_scene::{
+    ChunkRenderQueue, PresentedFrameAck, PresentedFrameGate, TargetRenderExpectation,
+};
 
 use crate::world_observation::{WorldReadyCommands, WorldReadyObservation};
 use client_presentation::camera;

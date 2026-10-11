@@ -30,7 +30,7 @@ pub(super) struct StartupCarriers {
     pub(super) block_entities: Option<Arc<RuntimeBlockEntityAssets>>,
     pub(super) particles: Option<Arc<RuntimeParticleAssets>>,
     pub(super) ui: Result<Arc<RuntimeUiAssets>>,
-    pub(super) weather: render::WeatherTextureAssets,
+    pub(super) weather: render_scene::WeatherTextureAssets,
     pub(super) collision: Result<PhysicsCollisionRegistries>,
 }
 

@@ -1,3 +1,15 @@
+## Render geometry and scene ownership
+
+- `render-model` owns CPU block-model and selection geometry, dropped-item meshes,
+  actor rig construction and artwork, and validated viewmodel meshes.
+- `render-scene` owns Bevy submission resources, chunk publication queues,
+  camera settings, and renderer acknowledgements. `client-presentation` and
+  `acceptance` consume these contracts without depending on `render`.
+- `render` owns GPU passes, pipelines, uploads, and render-world system registration.
+  The app composes the camera motion-blur plugin with the other GPU plugins.
+- Existing behavior tests are retained. Compilation and execution of these moves
+  remain unverified; behavior and performance acceptance gates stay open.
+
 ## Player interaction ownership
 
 `client-interaction` owns the movement and interaction resource wrappers, item-use
@@ -78,6 +90,17 @@ material selection, carrier roundtrips and malformed states. Offline Metal frame
 cover every state beside supporting terrain; broader world-join and performance
 gates remain open.
 
+## Respawn anchor artwork
+
+Respawn anchors compile six cube faces for charge states zero through four. Terrain
+arrays and animated top materials retain the selected charge, while the shared
+carried-face sheet preserves pack overrides for inventory and held rendering.
+Original-art regressions cover carrier roundtrips, short arrays, scalar overrides,
+transparent faces, partial animations and malformed states. Headless captures with
+checked world and icon carriers verify the held cube and all five charge textures
+through placement and charging input. Server-pack compilation, broader block and
+animation parity, and performance acceptance remain incomplete.
+
 ## End rod terrain geometry
 
 End rods compile a separate shaft and mounting plate for all six integer-facing states.
@@ -86,6 +109,28 @@ alpha testing and no full-face occlusion. The owning regression covers active re
 identities, carrier roundtrips, bounds, UVs and unsupported selectors. Offline GPU
 acceptance uses original fixture art and production terrain meshing and shaders;
 broader residual-family, world-join and performance gates remain open.
+
+## Grindstone terrain geometry
+
+Grindstones compile separate supports, pivots and wheel for floor, ceiling and
+wall mounts in all four directions, including the legacy multiple selector's
+floor pose. Each part retains its pack-resolved material and sprite rectangle.
+Original-art regressions cover every registered state, carrier roundtrips,
+malformed selectors and replacement sprites. Matched headless frames cover all
+16 registered states, and real input places a new grindstone through a local
+server. Acceptance uses externally compiled carriers with production terrain
+consumers; runtime server-pack compilation and reported server-version placement
+remain unverified. No broader parity gate closes.
+
+## Sea pickle terrain geometry
+
+Sea pickles compile one to four separate bodies and crossed live tips selected by
+the typed count and dead states. Bodies retain their side, top and inset cap sprite regions;
+replacement packs supply the sprite, and water remains a separate contributor.
+Original-art regressions cover all eight registry states, carrier roundtrips,
+material ownership and malformed selectors. Geometry uses the carrier's existing
+position and UV precision. Rendered/input acceptance and reported server-version
+placement remain incomplete; broader parity gates stay open.
 
 ## RakNet transport compatibility
 
@@ -259,6 +304,9 @@ moves do not change the open behavior or performance acceptance gates.
   performance gates remain open.
 - Dressing Room persists classic/slim and static custom-geometry skins, independent capes, imports and item edits. Home
   and Pause previews support rotation and pointer tracking. Cape attachment uses its own shoulders.
+  Standard fallback clothing uses quarter-texel expansion and the hat uses half-texel expansion;
+  base and outer faces share the skin atlas orientation. Redeclared skin parts default to visible
+  when they omit a hidden flag. Full second-layer preview parity remains incomplete.
 - Cropped cape imports pad the 46×22 layout at supported texture scales with transparent pixels,
   preserving texels and private source files. This custom import extension leaves native cape
   gallery parity incomplete.
@@ -2287,6 +2335,23 @@ materials, custom binding parents, full offhand cached-stack equivalence,
 nonuniform scale shear and the separate legacy/custom item paths. Changes are uncommitted;
 no complete first-person parity gate is closed. See
 [attachable rules](docs/reference/held-attachables.md).
+
+2026-10-11 initial actor presentation: newly bound animated rigs evaluate their
+initial pose and metadata-controlled visibility before a zero-tick frame draws.
+Evaluation uses current equipment, riding, skin and view context within the
+existing actor and world budgets. Repeated frames preserve authored state;
+simulation clocks continue on the next tick. Synthetic regressions cover custom
+packs, lifetime replacement, local view replay and budget exhaustion. Initial
+publication requires a complete animated pose, render-controller selection and
+selected geometry poses, using a nonzero pose identity at simulation tick zero.
+The Java animation option seeds current posture and riding flags without advancing motion.
+Pending first skins initialize once their prepared appearance is available,
+including when simulation ticks passed during preparation.
+Explicit rest artwork still requires a completed observation after admission or reset.
+Retries refresh current query inputs while retaining simulation history; local
+view refreshes keep priority over new rigs. Unchanged off-screen rigs allocate
+nothing between ticks. This does not close the broader actor animation or
+placement-latency parity gates.
 
 2026-10-04 end crystals and respawn anchors: crystal artwork now bakes native
 alpha-test coverage instead of dropping the whole rig over fractional texels;
@@ -7589,3 +7654,10 @@ Incomplete parity: exact custom-biome fallback profiles and regional or height-a
 Composters retain inward walls and a level-dependent floor. Cauldrons retain their rim, inner floor, walls and feet, with separate water, lava and powder-snow surfaces at each fill level. These models do not occlude full neighbor faces.
 
 Incomplete parity: cauldron block-actor potion and dyed-water colours require runtime block-actor data; their state-only visual remains provisional. Enhanced lighting and performance acceptance remain open.
+
+Movement descriptor coverage remains incomplete. The current physics carrier requires a typed
+movement disposition for every admitted state. Existing declared special rules retain their
+numerical behavior; unclassified states remain unresolved and keep the previous conservative
+numerical defaults. No ordinary movement classification is inferred from absence of a special
+rule. Complete native ordinary/special coverage, custom session movement components and
+all provisional rule values still require verification before this gate can close.
