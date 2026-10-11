@@ -6,7 +6,7 @@ use {assets::NetworkIdMode, gpu_snapshot::Draw, gpu_snapshot::Gpu};
 
 use crate::{chunk_constants, gpu_snapshot, material_shader, shader_source};
 
-/// Reads the active rod states and a requested original-art capture carrier.
+/// Reads the active registry and a requested original-art capture carrier.
 pub(crate) fn fixture(
     variable: &str,
 ) -> Option<(assets::RuntimeAssets, Vec<assets::RegistryRecord>)> {
@@ -136,6 +136,31 @@ pub(crate) fn render(
     mounting_offset: [i32; 3],
     include_rod: bool,
 ) -> Vec<u8> {
+    let mut eye_offset = Vec3::new(1.9, 1.3, 2.5);
+    for (axis, mounting_offset) in mounting_offset.into_iter().enumerate() {
+        if mounting_offset != 0 {
+            eye_offset[axis] = -(mounting_offset as f32) * eye_offset[axis];
+        }
+    }
+    render_at(
+        gpu,
+        assets,
+        mesh,
+        Vec3::splat(1.5) + eye_offset,
+        Vec3::splat(1.5),
+        include_rod,
+    )
+}
+
+/// Renders terrain model and cube streams with an explicit account-free fixture camera.
+pub(crate) fn render_at(
+    gpu: &Gpu,
+    assets: &assets::RuntimeAssets,
+    mesh: &meshing::ChunkMesh,
+    eye: Vec3,
+    center: Vec3,
+    include_models: bool,
+) -> Vec<u8> {
     let storage = wgpu::BufferUsages::STORAGE;
     let uniform = wgpu::BufferUsages::UNIFORM;
     let draw_refs = mesh
@@ -214,14 +239,7 @@ pub(crate) fn render(
             .collect::<Vec<_>>(),
         storage,
     );
-    let mut eye_offset = Vec3::new(1.9, 1.3, 2.5);
-    for (axis, mounting_offset) in mounting_offset.into_iter().enumerate() {
-        if mounting_offset != 0 {
-            eye_offset[axis] = -(mounting_offset as f32) * eye_offset[axis];
-        }
-    }
-    let eye = Vec3::splat(1.5) + eye_offset;
-    let camera = glam::camera::rh::view::look_at_mat4(eye, Vec3::splat(1.5), Vec3::Y);
+    let camera = glam::camera::rh::view::look_at_mat4(eye, center, Vec3::Y);
     let projection =
         glam::camera::rh::proj::directx::orthographic(-1.35, 1.35, -1.35, 1.35, 10.0, 0.1);
     let view = gpu.buffer(&gpu_snapshot::view(projection * camera, eye), uniform);
@@ -307,12 +325,12 @@ pub(crate) fn render(
                 .join(", ")
         )
     );
-    let opaque_end = if include_rod {
+    let opaque_end = if include_models {
         mesh.model_draw_refs().len() as u32 * 6
     } else {
         0
     };
-    let model_end = if include_rod {
+    let model_end = if include_models {
         draw_count as u32 * 6
     } else {
         0

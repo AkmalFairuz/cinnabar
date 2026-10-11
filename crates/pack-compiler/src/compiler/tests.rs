@@ -16,6 +16,8 @@ mod end_rod;
 mod lightning_rod;
 #[path = "tests/grass_side_mips.rs"]
 mod grass_side_mips;
+#[path = "tests/hollow_containers.rs"]
+mod hollow_containers;
 #[path = "tests/isotropic.rs"]
 mod isotropic;
 #[path = "tests/lantern.rs"]
