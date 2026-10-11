@@ -7669,6 +7669,16 @@ Composters retain inward walls and a level-dependent floor. Cauldrons retain the
 
 Incomplete parity: cauldron block-actor potion and dyed-water colours require runtime block-actor data; their state-only visual remains provisional. Enhanced lighting and performance acceptance remain open.
 
+Block destroy facts are compiled into world carrier 15 and read by numeric runtime
+identity during mining. Every input state is checked against the independent pinned
+registry; changed or custom identities remain unresolved. The existing hardness and
+tool source is retained as explicitly provisional prediction data. Full native tool,
+state-dependent hardness, legacy protocol and session destroy-component coverage is
+incomplete; this does not close the complete destroy parity gate. `make assets`
+regenerates the carrier and stale envelopes fail admission. Held-item tool and
+creative-break classification still use item names and need separate admission
+facts before the complete mining path can be considered name-free.
+
 Movement descriptor coverage remains incomplete. The current physics carrier requires a typed
 movement disposition for every admitted state. Existing declared special rules retain their
 numerical behavior; unclassified states remain unresolved and keep the previous conservative
