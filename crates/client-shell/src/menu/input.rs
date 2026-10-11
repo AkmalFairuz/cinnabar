@@ -368,7 +368,7 @@ pub fn drive_menu_input(
     mut presentation: ResMut<UiPresentationRuntime>,
     mut clipboard: ResMut<MenuClipboard>,
     mut menu: ResMut<MenuRuntime>,
-    runtime: Option<Res<client_ui::ui_runtime::UiRuntime>>,
+    mut runtime: Option<ResMut<client_ui::ui_runtime::UiRuntime>>,
     mut modifiers: Local<MenuModifiers>,
     consent: Option<Res<client_state::ConsentInput>>,
     mouse_messages: Option<Res<Messages<MouseButtonInput>>>,
@@ -381,8 +381,17 @@ pub fn drive_menu_input(
         mut focus,
         driven,
     } = context;
+    let now_millis = time.as_ref().map_or(0, |time| {
+        u64::try_from(time.elapsed().as_millis()).unwrap_or(u64::MAX)
+    });
     if let Some(time) = time {
         menu.advance_death_controls(time.delta_secs_f64());
+    }
+    // A browser's Escape left a screen open last frame; say how to close it instead.
+    if let Some(tip) = menu.take_escape_tip()
+        && let Some(runtime) = runtime.as_deref_mut()
+    {
+        tip.show(runtime, Some(&menu), now_millis);
     }
     menu.settings_slider_hovered = None;
     if consent.is_some_and(|consent| consent.0) {

@@ -262,6 +262,7 @@ mod resident_air;
 mod startup_lanes;
 mod transfer_priority;
 mod uniform_air;
+mod visible_light;
 
 /// Retired workers without tracked completions must release their slots before convergence retries.
 #[test]

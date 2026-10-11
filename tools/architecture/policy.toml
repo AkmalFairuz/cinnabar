@@ -610,13 +610,13 @@ consumer = "crates/client-ui/src/ui_runtime/crafting_observation.rs"
 literal = "RUST_MCBE_STAGE_PROFILE"
 kind = "environment_variable"
 producer = "crates/diagnostics/src/markers.rs"
-consumer = "app/src/app.rs"
+consumer = "app/src/app/launch.rs"
 
 [[markers]]
 literal = "RUST_MCBE_STAGE_PROFILE_FRAMES"
 kind = "environment_variable"
 producer = "crates/diagnostics/src/markers.rs"
-consumer = "app/src/app.rs"
+consumer = "app/src/app/launch.rs"
 
 [[markers]]
 literal = "RUST_MCBE_WORLD_SERVICE"
@@ -1101,3 +1101,10 @@ name = "first-run"
 path = "crates/first-run"
 allowed_dependencies = ["assets", "launcher", "launcher-host", "render-model", "semantic-input", "test-time", "ui", "gilrs"]
 forbidden_transitive_dependencies = ["app", "bedrock-client", "client-ui", "render", "bevy", "bevy_*"]
+
+# The browser entry: the client compiled to WebAssembly, fed carriers by its page.
+[[crates]]
+name = "web-client"
+path = "web/client"
+allowed_dependencies = ["app", "assets", "bridge", "client-shell", "launcher"]
+forbidden_dependencies = ["asset-compiler"]

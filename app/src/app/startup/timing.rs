@@ -53,10 +53,3 @@ impl CarrierLoadObserver for LoadTimes {
         self.time(carrier, load)
     }
 }
-
-/// Joins a scoped load, re-raising its panic on this thread.
-pub(crate) fn join<T>(handle: std::thread::ScopedJoinHandle<'_, T>) -> T {
-    handle
-        .join()
-        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-}

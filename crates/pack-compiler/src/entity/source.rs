@@ -1,8 +1,10 @@
 use std::{
-    fs::{File, OpenOptions},
+    fs::File,
     io::{self, Read},
-    path::{Component, Path},
+    path::Path,
 };
+#[cfg(any(unix, windows))]
+use std::{fs::OpenOptions, path::Component};
 
 use assets::{AssetError, MAX_ENTITY_SOURCE_BYTES};
 
@@ -36,6 +38,7 @@ pub(crate) fn read_bounded_source(root: &Path, path: &Path) -> Result<Vec<u8>, A
     Ok(bytes)
 }
 
+#[cfg(any(unix, windows))]
 fn relative_components<'a>(root: &Path, path: &'a Path) -> io::Result<Vec<&'a std::ffi::OsStr>> {
     let relative = path
         .strip_prefix(root)

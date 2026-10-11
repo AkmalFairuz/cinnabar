@@ -2,6 +2,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 pub mod discord_presence;
 pub mod fullscreen;
+pub mod join_progress;
 pub mod local_worlds;
 pub mod menu;
 pub mod player_skin;

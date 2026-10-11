@@ -35,10 +35,10 @@ use {
     client_state::PlayerRuntime,
 };
 
-use std::path::PathBuf;
 use web_time::Instant;
 
 mod client_id;
+mod relay;
 
 /// Bounded number of consecutive automatic transfer-follow hops.
 ///
@@ -74,6 +74,8 @@ pub(crate) struct SessionController {
     trust: Option<SessionTrust>,
     /// Server packs recent joins compiled; released once no join follows.
     kept_packs: &'static CompiledStacks,
+    /// The web relay a browser joins through, with no core of its own.
+    relay: relay::RelayLink,
 }
 
 impl Default for SessionController {
@@ -98,6 +100,7 @@ impl SessionController {
             connecting: false,
             trust: None,
             kept_packs: crate::runtime::network::compiled_stacks(),
+            relay: relay::RelayLink::default(),
         }
     }
 
@@ -180,7 +183,7 @@ impl SessionController {
         // previous run's directory would be reused for this session.
         let socket_dir = menu
             .layout()
-            .connect_socket_dir(std::process::id(), generation);
+            .connect_socket_dir(launcher::install_layout::process_id(), generation);
         // The guard owns the directory across every teardown path; an identity
         // conflict fails this connect loudly instead of reusing another
         // session's directory.
@@ -294,6 +297,7 @@ impl SessionResources<'_> {
         let controller = &mut *self.controller;
         let directory = controller.directory.take();
         let join = controller.join.take();
+        controller.relay.pending_join = None;
         controller
             .core
             .stop_detached(move || drop((join, directory)));
@@ -367,6 +371,10 @@ fn attempt_connect(
             address.trim().to_lowercase()
         }
     ));
+    let Some(address) = relay::defer_join(&mut session.controller, menu, address, local_world)
+    else {
+        return;
+    };
     let launcher = session.launcher.as_deref().and_then(|slot| {
         slot.begin_join(
             &address,
@@ -416,10 +424,10 @@ fn poll_join(
     session: &mut SessionResources<'_>,
     cache: &BlobCache,
 ) {
-    let controller = &mut *session.controller;
-    if controller.join.is_none() {
+    if relay::poll_join(commands, menu, session, cache) || session.controller.join.is_none() {
         return;
     }
+    let controller = &mut *session.controller;
     let client_random_id = match controller.poll_client_random_id() {
         Ok(Some(id)) => id,
         Ok(None) => return,
@@ -466,7 +474,7 @@ fn poll_join(
                 menu,
                 controller.generation,
                 cache,
-                socket_dir,
+                (bridge::CoreEndpoint::SocketDir(socket_dir), None),
                 login_settings,
                 client_random_id,
                 session.actor_artwork.as_deref(),
@@ -508,7 +516,7 @@ pub(crate) fn login_settings(
     }
 }
 
-/// Starts the network session against the core serving `socket_dir`.
+/// Starts the network session against `core`; `target` names the server a relay dials.
 #[allow(
     clippy::too_many_arguments,
     reason = "joining forwards captured session inputs and optional presentation assets"
@@ -518,7 +526,7 @@ fn start_network(
     menu: &MenuRuntime,
     session_generation: u64,
     cache: &BlobCache,
-    socket_dir: PathBuf,
+    (core, target): (bridge::CoreEndpoint, Option<bridge::ConnectTarget>),
     login_settings: protocol::LoginSettings,
     client_random_id: protocol::ClientRandomId,
     actor_artwork: Option<&render::ActorArtworkPages>,
@@ -526,7 +534,8 @@ fn start_network(
 ) -> Result<(), String> {
     let replacement = crate::runtime::network::session::spawn_network(NetworkConfig {
         session_generation,
-        socket_dir,
+        core,
+        target,
         display_name: menu.display_name().to_owned(),
         client_random_id,
         client_blob_cache: cache.cache(),

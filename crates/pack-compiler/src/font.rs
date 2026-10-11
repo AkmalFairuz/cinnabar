@@ -1,9 +1,12 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{self, Cursor, Read},
     path::{Path, PathBuf},
 };
+
+#[cfg(any(unix, windows))]
+use std::fs::OpenOptions;
 
 use assets::{
     FONT_CARRIER_SCHEMA, FontCatalogError, FontPixels, FontTexturePage, GlyphMetrics,
@@ -389,6 +392,8 @@ fn require_real_directory(path: &Path) -> Result<(), FontCompileError> {
 
 struct ResolvedSource {
     candidate: PathBuf,
+    // Held open so the font root cannot be swapped while the source is read.
+    #[cfg_attr(not(any(unix, windows)), allow(dead_code))]
     root_handle: File,
     #[cfg(unix)]
     file_name: Box<str>,

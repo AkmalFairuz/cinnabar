@@ -188,15 +188,21 @@ pub(crate) fn prepare_ui_resources(
         record_render_rejection(&stats, input.revision, reason);
         return;
     }
-    if let Err(reason) = gpu.textures.prepare(
+    let prepared = gpu.textures.prepare(
         &input.textures,
         &render_device,
         &render_queue,
         profile.as_deref(),
-    ) {
+    );
+    let upload = gpu.textures.upload_progress(&input.textures);
+    stats.update(|stats| stats.texture_upload = upload);
+    if let Err(reason) = prepared {
         gpu.accepted_revision = None;
         gpu.batches = Arc::from([]);
-        record_render_rejection(&stats, input.revision, reason);
+        // Pages still uploading are expected for a few frames, not a rejected frame.
+        if reason != UiRenderRejectReason::TexturesUploading {
+            record_render_rejection(&stats, input.revision, reason);
+        }
         return;
     }
 

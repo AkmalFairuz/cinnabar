@@ -14,6 +14,7 @@ mod construction;
 mod death;
 pub mod disconnect;
 mod dressing_room;
+pub mod escape_tips;
 #[cfg(test)]
 mod flow_tests;
 mod focus;
@@ -126,6 +127,10 @@ pub struct MenuRuntime {
     vsync_override: Option<bool>,
     display_name: String,
     launcher: bool,
+    /// A launcher-less session that the disconnect screen may join again, as a browser's is.
+    relay_retry: bool,
+    /// A screen a browser's Escape left open, whose tip the menu input shows.
+    escape_tip: Option<escape_tips::EscapeTip>,
     servers: Vec<SavedServer>,
     config_path: PathBuf,
     saves: ServerWriter,
@@ -251,6 +256,12 @@ impl MenuRuntime {
     /// Return the extension settings file alongside the other user settings.
     pub fn graphics_file(&self) -> PathBuf {
         self.layout.graphics_file()
+    }
+
+    /// Whether a primary click now would resume the game from the pause menu, which a browser
+    /// must answer inside that click's own event to capture the mouse again.
+    pub fn resume_hovered(&self) -> bool {
+        self.is_visible() && self.hovered == Some(MenuAction::PauseResume)
     }
 
     pub fn is_visible(&self) -> bool {
@@ -407,7 +418,7 @@ impl MenuRuntime {
 
     /// Shows local join errors in the world menu and remote errors on the disconnect screen.
     pub fn show_join_failure(&mut self, message: String) {
-        if self.feeds.join.kind == JoinKind::Local || !self.launcher {
+        if self.feeds.join.kind == JoinKind::Local || !self.retries_sessions() {
             self.message = Some(message);
         } else {
             bevy::log::warn!(error = %message, "join failed");
@@ -437,7 +448,7 @@ impl MenuRuntime {
     /// no launcher to fall back to and must still exit the process.
     pub fn absorb_session_failure(&mut self, error: &str) -> bool {
         self.reset_death();
-        if !self.launcher {
+        if !self.retries_sessions() {
             return false;
         }
         self.show_session_origin(MenuScreen::Play);

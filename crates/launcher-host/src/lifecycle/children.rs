@@ -141,13 +141,19 @@ pub fn install_exit_hooks(flush_logs: fn()) {
             stop_all(Duration::ZERO);
         }
     }));
-    let installed = ctrlc::try_set_handler(move || {
-        stop_all(EXIT_GRACE);
-        flush_logs();
-        std::process::exit(130);
-    });
-    if let Err(error) = installed {
-        tracing::warn!("child processes will not be stopped on SIGINT/SIGTERM: {error}");
+    // Browsers deliver no signals and run no child processes.
+    #[cfg(target_arch = "wasm32")]
+    let _ = flush_logs;
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let installed = ctrlc::try_set_handler(move || {
+            stop_all(EXIT_GRACE);
+            flush_logs();
+            std::process::exit(130);
+        });
+        if let Err(error) = installed {
+            tracing::warn!("child processes will not be stopped on SIGINT/SIGTERM: {error}");
+        }
     }
 }
 
@@ -368,6 +374,6 @@ mod tests {
             .read_to_string(&mut printed)
             .unwrap();
         child.wait();
-        assert_eq!(printed, std::process::id().to_string());
+        assert_eq!(printed, launcher::install_layout::process_id().to_string());
     }
 }

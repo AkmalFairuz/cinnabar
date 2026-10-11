@@ -1,6 +1,6 @@
 //! Shipped compiled faces used by OreUI's semantic text styles.
 
-use std::{fs::File, io::Read, path::Path, sync::Arc};
+use std::{io::Read, path::Path, sync::Arc};
 
 use assets::RuntimeFontCatalog;
 
@@ -8,14 +8,26 @@ use ui::oreui_theme::OreUiFont;
 
 /// Attaches valid optional carriers, retaining the default font for unavailable faces.
 pub fn install(base: Arc<RuntimeFontCatalog>, compiled_dir: &Path) -> Arc<RuntimeFontCatalog> {
+    install_from(base, compiled_dir, assets::carriers::file::open)
+}
+
+/// [`install`] with carriers opened by `open`, as a browser's preloaded ones are.
+fn install_from(
+    base: Arc<RuntimeFontCatalog>,
+    compiled_dir: &Path,
+    open: impl Fn(&Path) -> std::io::Result<assets::carriers::file::CarrierFile>,
+) -> Arc<RuntimeFontCatalog> {
     let mut combined = (*base).clone();
     for face in OreUiFont::ALL {
         let path = compiled_dir.join(face.carrier().output);
-        match load(face, &path).and_then(|font| {
-            combined
-                .with_named_font(face.name(), &font)
-                .map_err(|e| e.to_string())
-        }) {
+        match open(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|file| load(face, file))
+            .and_then(|font| {
+                combined
+                    .with_named_font(face.name(), &font)
+                    .map_err(|e| e.to_string())
+            }) {
             Ok(font) => combined = font,
             Err(reason) => eprintln!(
                 "{} unavailable at {} ({reason}); using default font; rebuild with make {}-assets",
@@ -33,8 +45,7 @@ pub fn install(base: Arc<RuntimeFontCatalog>, compiled_dir: &Path) -> Arc<Runtim
 }
 
 /// Bounds the read and validates both the carrier payload and its pinned source manifest.
-fn load(face: OreUiFont, path: &Path) -> Result<RuntimeFontCatalog, String> {
-    let file = File::open(path).map_err(|e| e.to_string())?;
+fn load(face: OreUiFont, file: impl Read) -> Result<RuntimeFontCatalog, String> {
     let mut bytes = Vec::new();
     file.take(assets::MAX_FONT_CARRIER_BYTES as u64 + 1)
         .read_to_end(&mut bytes)

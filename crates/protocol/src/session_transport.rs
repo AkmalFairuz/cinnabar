@@ -1,7 +1,6 @@
 use std::collections::VecDeque;
 use std::future::Future;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::Path;
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::task::{Context, Poll, ready};
@@ -12,9 +11,13 @@ use bytes::Bytes;
 use futures::Stream;
 use jolyne::stream::transport::{Transport, TransportMessage, TransportRecvMessage};
 
-/// Best-effort: tells the core whether this client applied (or reverted) the
-/// newest attempt's handed-off packs; returns whether the core recorded it.
-pub async fn report_pack_application(socket_dir: &Path, applied: bool) -> bool {
+/// Best-effort: tells a local core whether this client applied (or reverted) the newest
+/// attempt's handed-off packs; returns whether the core recorded it. A web relay keeps no
+/// pack status, so it records nothing.
+pub async fn report_pack_application(core: &bridge::CoreEndpoint, applied: bool) -> bool {
+    let bridge::CoreEndpoint::SocketDir(socket_dir) = core else {
+        return false;
+    };
     let Ok(status) = bridge::read_status(socket_dir).await else {
         return false;
     };

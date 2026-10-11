@@ -2,13 +2,32 @@ use super::*;
 use crate::test_support::fixture_font;
 use ui::oreui_theme as theme;
 
-/// Writes a small valid carrier bound to the selected shipped manifest.
-fn write_face(directory: &Path, face: OreUiFont) {
+/// A small valid carrier bound to the selected shipped manifest.
+fn face_bytes(face: OreUiFont) -> Box<[u8]> {
     let fixture = fixture_font();
     let profile = face.carrier().font_face.unwrap();
     let manifest = assets::canonical_source_manifest_sha256(profile.manifest);
-    let bytes = assets::encode_font_catalog(manifest, fixture.glyphs(), fixture.pages()).unwrap();
-    std::fs::write(directory.join(face.carrier().output), bytes).unwrap();
+    assets::encode_font_catalog(manifest, fixture.glyphs(), fixture.pages()).unwrap()
+}
+
+/// Writes [`face_bytes`] where [`install`] looks for the face.
+fn write_face(directory: &Path, face: OreUiFont) {
+    std::fs::write(directory.join(face.carrier().output), face_bytes(face)).unwrap();
+}
+
+#[test]
+fn faces_load_from_carriers_a_browser_holds_in_memory() {
+    let directory = Path::new("compiled");
+    let mut carriers = assets::carriers::file::MemoryCarriers::default();
+    for face in OreUiFont::ALL {
+        carriers.insert(directory.join(face.carrier().output), face_bytes(face));
+    }
+    let base = fixture_font();
+    let fonts = install_from(Arc::clone(&base), directory, |path| carriers.open(path));
+    assert_eq!(fonts.named_fonts().len(), OreUiFont::ALL.len());
+    for face in OreUiFont::ALL {
+        assert_ne!(fonts.font_named(face.name()).identity(), base.identity());
+    }
 }
 
 #[test]

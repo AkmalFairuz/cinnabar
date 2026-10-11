@@ -46,7 +46,11 @@ fn merge_entries(view: &mut DressingRoomView, defaults: Vec<DressingRoomCape>) {
     }
 }
 
-#[cfg(not(test))]
+/// Browsers fetch no default capes: their texture host does not allow cross-origin reads.
+#[cfg(all(not(test), target_arch = "wasm32"))]
+pub fn refresh(_layout: &InstallLayout) {}
+
+#[cfg(all(not(test), not(target_arch = "wasm32")))]
 pub fn refresh(layout: &InstallLayout) {
     if default_capes::JAVA_CAPES.is_empty() {
         return;
@@ -120,7 +124,10 @@ pub fn refresh(layout: &InstallLayout) {
                 static NEXT_FILE: std::sync::atomic::AtomicU64 =
                     std::sync::atomic::AtomicU64::new(0);
                 let nonce = NEXT_FILE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let temp = path.with_extension(format!("{}.{nonce}.tmp", std::process::id()));
+                let temp = path.with_extension(format!(
+                    "{}.{nonce}.tmp",
+                    launcher::install_layout::process_id()
+                ));
                 if fs::write(&temp, bytes).is_ok() {
                     let _ = fs::rename(&temp, &path);
                 }

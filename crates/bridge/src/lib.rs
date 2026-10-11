@@ -4,6 +4,7 @@ mod account;
 /// Shared frame limits and session message kinds for the Rust and Go bridge.
 pub mod contract;
 pub use contract::MAX_FRAME_LEN;
+#[cfg_attr(target_arch = "wasm32", path = "endpoint_web.rs")]
 mod endpoint;
 mod error;
 mod framed;
@@ -14,11 +15,17 @@ mod worlds;
 mod xbox_presence;
 pub use xbox_presence::{XboxPresenceState, report_xbox_presence};
 
+use std::fmt;
 use std::path::{Path, PathBuf};
 
-/// Connects to the core's session endpoint published in `socket_dir`.
-pub async fn connect_session(socket_dir: &Path) -> anyhow::Result<(FramedReader, FrameQueue)> {
-    let stream = endpoint::connect(socket_dir, endpoint::EndpointKind::Session).await?;
+/// Connects to the core's session endpoint: one a local core publishes, or a browser's relay.
+pub async fn connect_session(core: &CoreEndpoint) -> anyhow::Result<(FramedReader, FrameQueue)> {
+    let stream = match core {
+        CoreEndpoint::SocketDir(socket_dir) => {
+            endpoint::connect(socket_dir, endpoint::EndpointKind::Session).await?
+        }
+        CoreEndpoint::Relay(relay) => endpoint::connect_relay(relay).await?,
+    };
     Ok(crate::framed::queued(stream, MAX_FRAME_LEN))
 }
 
@@ -68,6 +75,35 @@ pub fn control_endpoint_path(socket_dir: &Path) -> std::path::PathBuf {
     endpoint::endpoint_path(socket_dir, endpoint::EndpointKind::Control)
 }
 
+/// Where the client reaches its core's session endpoint. Browsers reach only a relay and native
+/// builds only a local core; connecting to the other fails.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CoreEndpoint {
+    /// A local core publishing its endpoints in this socket directory.
+    SocketDir(PathBuf),
+    /// A web relay running this browser's sessions.
+    Relay(RelaySession),
+}
+
+/// A browser's session on a web relay.
+#[derive(Clone, PartialEq, Eq)]
+pub struct RelaySession {
+    /// The relay's base WebSocket URL, such as `wss://play.example.com`.
+    pub url: String,
+    /// The session the relay's control endpoint issued; it is the browser's only credential.
+    pub session_id: String,
+}
+
+impl fmt::Debug for RelaySession {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RelaySession")
+            .field("url", &self.url)
+            .field("session_id", &"<redacted>")
+            .finish()
+    }
+}
+
 /// How long a freshly spawned core has to publish its bridge endpoint.
 pub const CORE_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
@@ -92,12 +128,12 @@ pub fn bridge_endpoint_exists(directory: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::PathBuf;
 
     use bytes::Bytes;
     use futures::Stream;
 
-    use super::{BridgeError, FrameQueue, FramedReader, connect_session};
+    use super::{BridgeError, CoreEndpoint, FrameQueue, FramedReader, connect_session};
 
     fn assert_transport<R, W>()
     where
@@ -114,7 +150,7 @@ mod tests {
 
     #[tokio::test]
     async fn connect_session_rejects_empty_directory() {
-        let error = match connect_session(Path::new("")).await {
+        let error = match connect_session(&CoreEndpoint::SocketDir(PathBuf::new())).await {
             Ok(_) => panic!("empty socket directory must fail"),
             Err(error) => error,
         };

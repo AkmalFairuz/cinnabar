@@ -91,7 +91,9 @@ pub use service::{ServicedStream, WorldStreamService};
 mod sign_edit;
 mod transfer_priority;
 mod workers;
-pub use workers::{on_idle_world_cores, world_worker_threads};
+#[cfg(target_arch = "wasm32")]
+pub use workers::run_queued_world_jobs;
+pub use workers::{FrameJobBudget, on_idle_world_cores, world_worker_threads};
 
 use client_world::ingestion::{
     BlockMutationBatch, CommitBudget, CommitStep, DecodeCommit, DecodeCompletion, DecodeIds,
@@ -150,6 +152,19 @@ const MAX_PENDING_MESH_QUEUE_WORK_PER_POLL: usize = MAX_PENDING_MESH_CHANGES;
 pub const MAX_IN_FLIGHT_LIGHT_JOBS: usize = 32;
 const MIN_EFFECTIVE_LIGHT_JOB_CAP: usize = 2;
 const MAX_LIGHT_COLUMN_BATCH_SUB_CHUNKS: usize = 32;
+/// Whether sections mesh before their light is solved, with the light they had or the
+/// dimension's default, and mesh again once it lands. A browser solves light on its only thread
+/// after decoding, so this puts terrain on screen long before its light is ready; native
+/// workers solve light beside decoding and keep meshing only lit sections.
+const PROVISIONAL_LIGHT_MESHES: bool = cfg!(target_arch = "wasm32");
+/// Sections holding blocks that one light job solves together. Native workers solve whole
+/// columns beside the frame; a browser runs every job on its only thread, between the rest of
+/// each frame's work, so a few sections at a time keep its frames on time.
+const MAX_LIGHT_BATCH_SOLID_SECTIONS: usize = if cfg!(target_arch = "wasm32") {
+    2
+} else {
+    MAX_LIGHT_COLUMN_BATCH_SUB_CHUNKS
+};
 const INITIAL_LIGHT_BACKLOG_THRESHOLD: usize = 256;
 /// Quiet relighting admits half the light workers' width.
 fn light_job_cap_for_threads(light_workers: usize) -> usize {
@@ -375,6 +390,8 @@ pub struct WorldStream {
     urgent_work_due: bool,
     /// Per-frame ingress, commit and scheduling allocation.
     poll_budget: Duration,
+    /// See [`PROVISIONAL_LIGHT_MESHES`].
+    provisional_light_meshes: bool,
     polling: bool,
     /// The poll's one heavy commit allowed past its deadline is still unspent.
     poll_heavy_guarantee: bool,

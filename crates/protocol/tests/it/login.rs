@@ -33,7 +33,8 @@ async fn login_reaches_start_game_through_bds() {
     let (mut session, game_data) = tokio::time::timeout(
         LOGIN_TIMEOUT,
         LoginSequence::connect_session(
-            socket_dir.path(),
+            &bridge::CoreEndpoint::SocketDir(socket_dir.path().to_path_buf()),
+            None,
             "RustMCBEPhase0",
             protocol::ClientRandomId::new(-7).unwrap(),
             None,
@@ -144,7 +145,8 @@ async fn offline_core_session_preserves_startup_behaviour() {
         let login = tokio::time::timeout(
             LOGIN_TIMEOUT,
             LoginSequence::connect_session(
-                socket_dir.path(),
+                &bridge::CoreEndpoint::SocketDir(socket_dir.path().to_path_buf()),
+                None,
                 "StartupFixture",
                 protocol::ClientRandomId::new(-7).unwrap(),
                 None,

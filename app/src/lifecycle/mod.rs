@@ -1,15 +1,19 @@
 //! Process lifecycle around the client: crash capture, first-run asset preparation, update checks.
 
-use anyhow::{Context, Result};
-use launcher_host::lifecycle::{crash, update};
+#[cfg(not(target_arch = "wasm32"))]
+use {
+    anyhow::{Context, Result},
+    launcher::install_layout::InstallLayout,
+    launcher_host::lifecycle::{crash, update},
+};
 
+#[cfg(not(target_arch = "wasm32"))]
 mod client_logs;
-
-use launcher::install_layout::InstallLayout;
 
 /// Runs pre-window duties for a packaged install; a no-op for development checkouts.
 /// `assets_overridden` skips asset preparation when the caller supplied its own carrier path.
 /// Returns `false` when the user quit first-time setup, so the client should exit quietly.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn before_run(assets_overridden: bool) -> Result<bool> {
     let layout = InstallLayout::discover().context("resolve install layout")?;
     client_logs::capture(&layout);

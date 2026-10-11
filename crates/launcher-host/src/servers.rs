@@ -9,7 +9,6 @@ use std::{
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
-    process,
 };
 
 use anyhow::{Context, Result, bail};
@@ -177,7 +176,7 @@ fn write_servers(path: &Path, servers: &[SavedServer]) -> Result<()> {
         path.file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default(),
-        process::id()
+        launcher::install_layout::process_id()
     ));
     // One writer thread owns this file, so clearing a leftover temp
     // from an earlier crashed run is safe and keeps create_new working when

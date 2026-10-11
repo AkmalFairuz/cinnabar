@@ -65,6 +65,7 @@ members = [
     "tools/cinnabar-mcp",
     "tools/cxb",
     "tools/release-manifest",
+    "web/client",
 ]
 resolver = "3"
 
@@ -76,7 +77,8 @@ rust-version = "1.99.0"
 [workspace.dependencies]
 glam = { version = "0.33.2", default-features = false, features = ["std", "f64"] }
 # One feature set per heavy dependency: any per-crate difference rebuilds it and every dependent.
-# wayland/x11 only select winit backends on Linux; winit ignores them on other targets.
+# wayland/x11 only select winit backends on Linux; winit ignores them on other targets, and
+# webgpu only selects wgpu's browser backend on WebAssembly.
 bevy = { version = "=0.20.0", default-features = false, features = [
     "bevy_anti_alias",
     "smaa_luts",
@@ -101,6 +103,7 @@ bevy = { version = "=0.20.0", default-features = false, features = [
     "std",
     "wayland",
     "x11",
+    "webgpu",
 ] }
 # The noop backend only runs when an instance explicitly enables it (render tests).
 wgpu = { version = "30.0.1", default-features = false, features = ["noop", "wgsl"] }

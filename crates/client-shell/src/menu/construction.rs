@@ -69,6 +69,8 @@ impl MenuRuntime {
             // started on the menu. `--address` keeps the historical behaviour
             // of exiting the process when its one session fails.
             launcher: visible,
+            relay_retry: false,
+            escape_tip: None,
             visible,
             screen: initial.screen,
             focused: 0,
@@ -121,7 +123,9 @@ impl MenuRuntime {
             friends: initial.friends,
             catalog_message: initial.catalog_message,
             catalog_started: false,
-            catalog: launcher_host::catalog::Catalog::new(layout.catalog_file(std::process::id())),
+            catalog: launcher_host::catalog::Catalog::new(
+                layout.catalog_file(launcher::install_layout::process_id()),
+            ),
             catalog_art: None,
             auth_process: None,
             auth_attempted: false,

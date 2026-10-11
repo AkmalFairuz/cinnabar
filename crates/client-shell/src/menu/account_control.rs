@@ -141,7 +141,12 @@ impl MenuRuntime {
         }
         control.set_joining(self.is_connecting());
         if self.is_connecting() {
-            self.feeds.join.observe(control.join_stage());
+            // A browser's join is prepared by the web relay, which reports it instead.
+            let stage = control.join_stage().or_else(|| {
+                crate::join_progress::relayed()
+                    .map(|progress| launcher_host::launcher_account::join_stage(&progress))
+            });
+            self.feeds.join.observe(stage);
         }
         if let Some((prompt, trusted)) = self
             .feeds

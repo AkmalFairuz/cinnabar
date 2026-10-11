@@ -222,8 +222,10 @@ async fn check_handed_off_packs(cached: bool) {
         core.send(batch_frame(&spawn_prerequisites())).await;
         core
     };
+    let endpoint = socket_dir(dir.path());
     let join = LoginSequence::connect_session(
-        dir.path(),
+        &endpoint,
+        None,
         "Fixture",
         crate::ClientRandomId::new(-7).unwrap(),
         Some(ClientBlobCache::default()),
@@ -308,9 +310,11 @@ async fn a_startup_longer_than_one_batch_still_joins() {
         core.send(batch_frame(&spawn_prerequisites())).await;
         core
     };
+    let endpoint = socket_dir(dir.path());
     let (joined, _core) = tokio::join!(
         LoginSequence::connect_session(
-            dir.path(),
+            &endpoint,
+            None,
             "Fixture",
             crate::ClientRandomId::new(-7).unwrap(),
             None,
@@ -370,9 +374,11 @@ async fn a_disconnect_before_the_handoff_is_a_server_disconnect() {
         core.send(frame.freeze()).await;
         core
     };
+    let endpoint = socket_dir(dir.path());
     let (joined, _core) = tokio::join!(
         LoginSequence::connect_session(
-            dir.path(),
+            &endpoint,
+            None,
             "Fixture",
             crate::ClientRandomId::new(-7).unwrap(),
             None,
@@ -406,9 +412,11 @@ async fn a_transfer_before_the_handoff_is_a_server_transfer() {
         core.send(frame.freeze()).await;
         core
     };
+    let endpoint = socket_dir(dir.path());
     let (joined, _core) = tokio::join!(
         LoginSequence::connect_session(
-            dir.path(),
+            &endpoint,
+            None,
             "Fixture",
             crate::ClientRandomId::new(-7).unwrap(),
             None,
@@ -482,8 +490,10 @@ async fn invalid_cached_archive_is_reported_as_a_join_error() {
         }), &[start_game()])).await;
         core
     };
+    let endpoint = socket_dir(dir.path());
     let join = LoginSequence::connect_session(
-        dir.path(),
+        &endpoint,
+        None,
         "Fixture",
         ClientRandomId::new(-7).unwrap(),
         None,
@@ -495,4 +505,8 @@ async fn invalid_cached_archive_is_reported_as_a_join_error() {
         Err(error) => assert!(error.to_string().contains("cached archive hash"), "{error}"),
         Ok(_) => panic!("a corrupt cached archive joined"),
     }
+}
+
+fn socket_dir(path: &std::path::Path) -> bridge::CoreEndpoint {
+    bridge::CoreEndpoint::SocketDir(path.to_path_buf())
 }

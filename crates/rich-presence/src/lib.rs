@@ -1,12 +1,17 @@
 //! Optional Discord desktop activity, with all IPC owned by the RPC worker.
 
 mod join;
+// Discord runs beside the game, reached over local IPC browsers cannot open.
+#[cfg(not(target_arch = "wasm32"))]
 mod launch;
+#[cfg(not(target_arch = "wasm32"))]
 mod presence;
 
 pub use join::join_address;
+#[cfg(not(target_arch = "wasm32"))]
 pub use presence::{JoinRequest, Presence};
 
+#[cfg(not(target_arch = "wasm32"))]
 use discord_presence::models::Activity;
 
 pub const APPLICATION_ID_ENV: &str = "CINNABAR_DISCORD_APPLICATION_ID";
@@ -73,9 +78,11 @@ pub struct Badge {
     pub name: String,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// Discord rejects longer image keys and URLs.
 const MAX_IMAGE_BYTES: usize = 256;
 
+#[cfg(not(target_arch = "wasm32"))]
 impl State {
     /// `players` is how many are in the session now, for the party size.
     pub fn activity(
@@ -162,8 +169,10 @@ impl State {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_STATE_BYTES: usize = 128;
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Default)]
 struct Publication {
     last: Option<(State, u64, Option<Target>, Option<u32>)>,
@@ -171,6 +180,7 @@ struct Publication {
     playing_since: Option<u64>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Publication {
     fn changed(
         &mut self,
@@ -209,6 +219,7 @@ impl Publication {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn unix_seconds() -> u64 {
     web_time::SystemTime::now()
         .duration_since(web_time::UNIX_EPOCH)

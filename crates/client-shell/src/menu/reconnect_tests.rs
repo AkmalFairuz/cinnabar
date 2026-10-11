@@ -172,6 +172,40 @@ fn local_worlds_and_changed_accounts_cannot_retry_a_remote_destination() {
 }
 
 #[test]
+fn a_relay_session_retries_from_the_disconnect_screen_instead_of_ending() {
+    // A plain `--address` run has nowhere to return to and still ends.
+    let mut direct = MenuRuntime::new(false, 2, "Player".into());
+    assert!(!direct.absorb_session_failure("network session failed: closed"));
+    for escape in [false, true] {
+        let mut menu =
+            MenuRuntime::new(false, 2, "Player".into()).with_relay_retry("127.0.0.1:19132");
+        menu.show_join_failure("Could not connect: refused".into());
+        assert!(
+            menu.view().can_reconnect,
+            "a failed first join offers retry"
+        );
+        for _ in 0..2 {
+            menu.activate(MenuAction::Reconnect);
+            let retry = menu.take_join_intent().expect("reconnect queues a join");
+            assert_eq!(retry.address, "127.0.0.1:19132");
+            menu.show_world();
+            assert!(menu.absorb_session_failure("network session failed: closed"));
+            assert!(menu.view().can_reconnect);
+        }
+        assert!(
+            !menu.take_exit_request(),
+            "nothing ends until the player dismisses"
+        );
+        if escape {
+            menu.go_back();
+        } else {
+            menu.activate(MenuAction::DismissDialog);
+        }
+        assert!(menu.take_exit_request(), "dismissing hands the page back");
+    }
+}
+
+#[test]
 fn dismiss_and_escape_return_to_the_origin_without_a_stale_retry() {
     for escape in [false, true] {
         let mut menu = MenuRuntime::new(true, 2, "Player".into());

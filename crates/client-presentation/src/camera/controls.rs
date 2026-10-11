@@ -137,6 +137,23 @@ pub fn input_is_active(window: &Window, cursor: &CursorOptions) -> bool {
     window.focused && cursor.grab_mode == CursorGrabMode::Locked && !cursor.visible
 }
 
+/// Whether a primary click on the game would capture the cursor now: gameplay owns the pointer,
+/// input is `focused`, the cursor is not `captured`, and only the click itself is missing.
+/// Browsers read this inside the click's own event, the only time some of them grant pointer
+/// lock.
+pub fn capture_on_click(
+    policy: &crate::observations::CursorPolicy,
+    focused: bool,
+    captured: bool,
+) -> bool {
+    !policy.driven
+        && !policy.consent
+        && !policy.absorbs_input
+        && policy.steals_mouse != Some(false)
+        && focused
+        && !captured
+}
+
 /// Requests the captured gameplay pointer state.
 fn capture_cursor(cursor: &mut CursorOptions) {
     cursor.grab_mode = CursorGrabMode::Locked;

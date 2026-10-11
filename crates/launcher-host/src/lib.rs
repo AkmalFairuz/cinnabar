@@ -5,6 +5,7 @@ pub mod accounts;
 pub mod auth;
 pub mod catalog;
 pub mod catalog_art;
+#[cfg_attr(target_arch = "wasm32", path = "client_random_id_web.rs")]
 pub mod client_random_id;
 pub mod core_process;
 pub mod desktop;
