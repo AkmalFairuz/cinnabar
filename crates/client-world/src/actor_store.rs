@@ -217,19 +217,12 @@ impl ActorSnapshot {
             dragon_animation: None,
             hitboxes: None,
         };
-        snapshot.apply_metadata(&spawn.metadata);
-        // A falling block's spawn position carries its network offset, which its box sets.
-        if matches!(&snapshot.kind, ActorKind::Entity { identifier } if identifier.as_ref() == "minecraft:falling_block")
-        {
-            let offset = snapshot.falling_block_network_offset();
-            for position in [
-                &mut snapshot.position,
-                &mut snapshot.previous_pose.position,
-                &mut snapshot.received_pose.position,
-            ] {
-                position[1] -= offset;
-            }
+        // A falling block's spawn position carries its network offset, which its box sets; the
+        // vanilla offset comes off here and `apply_metadata` rebases onto the spawn's box.
+        if snapshot.is_falling_block() {
+            snapshot.shift_poses_y(-snapshot.falling_block_network_offset());
         }
+        snapshot.apply_metadata(&spawn.metadata);
         snapshot.apply_attributes(&spawn.attributes);
         snapshot.sync_status_from_health();
         snapshot.apply_properties(&spawn.properties);
@@ -542,7 +535,26 @@ impl ActorSnapshot {
             .unwrap_or(DEFAULT_PRIMED_TNT_NETWORK_OFFSET)
     }
 
+    fn is_falling_block(&self) -> bool {
+        matches!(&self.kind, ActorKind::Entity { identifier } if identifier.as_ref() == "minecraft:falling_block")
+    }
+
+    /// Moves every retained pose and interpolation target by `delta` blocks vertically.
+    fn shift_poses_y(&mut self, delta: f32) {
+        for position in [
+            &mut self.position,
+            &mut self.previous_pose.position,
+            &mut self.received_pose.position,
+        ] {
+            position[1] += delta;
+        }
+        self.shift_interpolation_targets_y(delta);
+    }
+
     fn apply_metadata(&mut self, metadata: &[protocol::ActorMetadata]) -> bool {
+        let falling_block_offset = self
+            .is_falling_block()
+            .then(|| self.falling_block_network_offset());
         let mut rejected = false;
         for metadata in metadata {
             if self.metadata.len() >= MAX_ACTOR_METADATA_ENTRIES
@@ -559,6 +571,14 @@ impl ActorSnapshot {
                     .apply(&metadata.value);
             }
             self.metadata.insert(metadata.key, metadata.value.clone());
+        }
+        // Stored feet stay under the unchanged network position when Scale or box height moves
+        // the offset.
+        if let Some(previous) = falling_block_offset {
+            let offset = self.falling_block_network_offset();
+            if offset != previous {
+                self.shift_poses_y(previous - offset);
+            }
         }
         let burning = self.is_on_fire();
         self.status.fire.observe(burning, self.status.age_ticks);

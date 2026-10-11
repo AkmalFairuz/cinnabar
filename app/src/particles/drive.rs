@@ -31,6 +31,9 @@ use {
 };
 
 #[cfg(test)]
+#[path = "drive/bite_tests.rs"]
+mod bite_tests;
+#[cfg(test)]
 #[path = "drive/snowball_tests.rs"]
 mod snowball_tests;
 
@@ -306,13 +309,15 @@ fn route_notice(system: &mut ParticleSystem, routing: &Routing<'_>, notice: &Act
                 ));
             }
         }
-        // The local player's own bites scatter from its eating cue instead (`spawn_local_bite`).
-        ActorStatusKind::Feed if notice.runtime_id == routing.stream.local_player_runtime_id() => {}
         ActorStatusKind::Feed => {
             if let Some(identifier) = routing
                 .stream
                 .authority()
                 .item_identifier(notice.data >> 16)
+                // The local player's predicted bites scatter from its eating cue instead
+                // (`spawn_local_bite`).
+                && !(notice.runtime_id == routing.stream.local_player_runtime_id()
+                    && client_audio::audio::predicted::predicts_bites(&identifier))
                 && let Some(icons) = routing.icons
                 && let Some(tile) = item_tile(icons, &identifier, (notice.data & 0xffff) as u32)
             {
@@ -329,13 +334,12 @@ fn route_notice(system: &mut ParticleSystem, routing: &Routing<'_>, notice: &Act
 const FIRST_PERSON_BITE_AHEAD: f32 = 0.45;
 const FIRST_PERSON_BITE_BELOW: f32 = 0.15;
 
-/// Scatters crumbs of the local player's food for one bite: in view of a first-person camera,
-/// else from the player's mouth as other players see it.
+/// Scatters crumbs of the local player's food for one bite.
 fn spawn_local_bite(
     system: &mut ParticleSystem,
     routing: &Routing<'_>,
     camera: &Transform,
-    eye: Option<bevy::math::Vec3>,
+    first_person: bool,
     cue: &client_audio::audio::predicted::LocalEatingCue,
 ) {
     let Some(tile) = routing
@@ -344,21 +348,26 @@ fn spawn_local_bite(
     else {
         return;
     };
-    let first_person = eye.is_some_and(|eye| camera.translation.distance(eye) < 0.1);
-    let position = if first_person {
-        camera.translation + camera.forward() * FIRST_PERSON_BITE_AHEAD
-            - camera.up() * FIRST_PERSON_BITE_BELOW
-    } else {
-        let Some(actor) = routing
-            .stream
-            .authority()
-            .actor(routing.stream.local_player_runtime_id())
-        else {
-            return;
-        };
-        bevy::math::Vec3::from_array(actor.eating_position())
-    };
-    system.spawn(&eating_item_request(position.to_array(), tile));
+    if let Some(position) = local_bite_position(routing.stream, camera, first_person) {
+        system.spawn(&eating_item_request(position.to_array(), tile));
+    }
+}
+
+/// In view of the camera when it resolves to first person, else the local player's mouth as
+/// other players see it; `None` without a local actor in third person.
+fn local_bite_position(
+    stream: &WorldStream,
+    camera: &Transform,
+    first_person: bool,
+) -> Option<bevy::math::Vec3> {
+    if first_person {
+        return Some(
+            camera.translation + camera.forward() * FIRST_PERSON_BITE_AHEAD
+                - camera.up() * FIRST_PERSON_BITE_BELOW,
+        );
+    }
+    let actor = stream.authority().actor(stream.local_player_runtime_id())?;
+    Some(bevy::math::Vec3::from_array(actor.eating_position()))
 }
 
 /// Hit pieces on the local player's target and on the nearest server-reported cracks.
@@ -412,10 +421,11 @@ fn drive_particles(
     mining: Option<Res<SurvivalMiningRuntime>>,
     mut session: Local<(u64, i32)>,
     mut crack_timer: Local<f32>,
-    (mut block_cues, mut eating_cues, local_view): (
+    (mut block_cues, mut eating_cues, camera_settings, server_camera): (
         MessageReader<client_audio::audio::LocalBlockCue>,
         MessageReader<client_audio::audio::predicted::LocalEatingCue>,
-        Option<Res<client_presentation::local_player::LocalViewPose>>,
+        Option<Res<client_presentation::camera::CameraSettingsAuthority>>,
+        Option<Res<client_presentation::camera::ServerCameraView>>,
     ),
     mut break_echoes: Local<client_audio::audio::EchoLedger>,
     mut ambient: Local<AmbientParticles>,
@@ -462,7 +472,12 @@ fn drive_particles(
         icons: icons.as_ref().map(|icons| &*icons.0),
     };
     let view = particle_view(&(*transform).into(), projection);
-    let eye = local_view.map(|pose| pose.eye_translation());
+    let first_person = crate::ui_runtime::presentation::publish::hand_first_person(
+        camera_settings.map_or(semantic_input::PerspectiveMode::FirstPerson, |settings| {
+            settings.perspective()
+        }),
+        server_camera.as_deref(),
+    );
     system.set_camera(view.position);
     ambient.drive(
         time.delta(),
@@ -535,7 +550,7 @@ fn drive_particles(
         route_notice(&mut system, &routing, &notice);
     }
     for cue in eating_cues.read() {
-        spawn_local_bite(&mut system, &routing, transform, eye, cue);
+        spawn_local_bite(&mut system, &routing, transform, first_person, cue);
     }
     if let Some(mut splashes) = splashes {
         for position in splashes

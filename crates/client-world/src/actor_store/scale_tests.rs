@@ -101,3 +101,34 @@ fn falling_block_network_offsets_follow_their_scaled_box() {
         assert!((store.get(40).unwrap().position[1] - feet).abs() < 1e-5);
     }
 }
+
+#[test]
+fn falling_block_scale_change_keeps_its_network_position_and_targets() {
+    let mut store = ActorStore::new(1, 0);
+    let ActorEvent::Spawn(mut event) =
+        entity_spawn(40, -40, "minecraft:falling_block", Arc::from([]))
+    else {
+        unreachable!()
+    };
+    event.position[1] = 64.5;
+    store.apply(1, 1, ActorEvent::Spawn(event));
+    store.apply(1, 2, network_move(40, 66.5, false));
+    let before = store.get(40).unwrap().native_position()[1];
+    store.apply(
+        1,
+        3,
+        ActorEvent::Metadata(ActorMetadataUpdateEvent {
+            dimension: 0,
+            runtime_id: 40,
+            metadata: Arc::from([ActorMetadata {
+                key: SCALE_METADATA_KEY,
+                value: ActorMetadataValue::Float(2.0),
+            }]),
+            properties: Arc::from([]),
+            tick: 3,
+        }),
+    );
+    assert!((store.get(40).unwrap().native_position()[1] - before).abs() < 1e-5);
+    store.advance_interpolation_ticks(64);
+    assert!((store.get(40).unwrap().native_position()[1] - 66.5).abs() < 1e-5);
+}

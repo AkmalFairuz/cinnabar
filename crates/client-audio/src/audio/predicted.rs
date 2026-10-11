@@ -66,6 +66,12 @@ pub fn is_consumable(identifier: &str) -> Option<&'static str> {
     }
 }
 
+/// Whether the local player's bites of `identifier` come as [`LocalEatingCue`]s; other foods'
+/// crumbs stay with the server's feed notices.
+pub fn predicts_bites(identifier: &str) -> bool {
+    is_consumable(identifier) == Some("eat")
+}
+
 /// Voices local block placement, mining hits and the predicted break of the mined block.
 #[allow(clippy::too_many_arguments)]
 pub fn drive_block_cues(
@@ -244,7 +250,8 @@ pub fn drive_consume_audio(
         return;
     }
     if let Some(identifier) = identifier
-        && cues.contains(&ConsumeCue::Step("eat"))
+        && predicts_bites(&identifier)
+        && cues.iter().any(|cue| matches!(cue, ConsumeCue::Step(_)))
     {
         eating.write(LocalEatingCue {
             identifier,
@@ -350,6 +357,14 @@ mod tests {
         assert_eq!(is_consumable("minecraft:honey_bottle"), Some("drink.honey"));
         assert_eq!(is_consumable("minecraft:experience_bottle"), None, "thrown");
         assert_eq!(is_consumable("minecraft:stone"), None);
+    }
+
+    // A server-defined food had neither a predicted bite nor the server's feed crumbs.
+    #[test]
+    fn only_vanilla_foods_predict_local_bites() {
+        assert!(predicts_bites("minecraft:bread"));
+        assert!(!predicts_bites("minecraft:potion"));
+        assert!(!predicts_bites("custom:burger"));
     }
 
     // Food only burped after releasing Use past a fixed 1.6 s, whatever the item's duration.
