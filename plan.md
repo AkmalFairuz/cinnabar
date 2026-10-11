@@ -1,3 +1,13 @@
+## RakNet transport compatibility
+
+The Go core, local server, and fixture generator share a reviewed transport revision with
+corrected handshake addresses and probe cadence, connected control framing, reliability
+and ordering, peer GUID generation, datagram batching, and outgoing split envelopes.
+
+Full transport parity remains incomplete. Host-resolver timing and address admission,
+absolute monotonic timestamp origin, and discovery-peer reuse remain provisional across
+platforms. These limits and the unresolved server-routing behavior remain open gates.
+
 ## Login identity
 
 - New core-owned logins derive SelfSignedId from the full stored ClientRandomId and the
