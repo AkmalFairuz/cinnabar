@@ -2484,7 +2484,13 @@ states by network hash (pack visuals via the runtime overlay; stone-surface coll
 provisional); sequential customs sorting among vanilla remap wire ids, custom collision
 uses `minecraft:collision_box`, and vanilla blocks retexture from a pack's terrain keys
 via the `.matkeys.json` sidecar (rebuild assets to emit it). Vanilla item icons override by
-short-name key (provisional). Custom-block selection boxes drive the pick ray. Server-pack entities compile in memory per session (`compile_actor_pack`) into their own
+short-name key (provisional). Custom-block selection boxes drive the pick ray. 2026-10-11 terrain
+diagnostics: rejected terrain routes are counted per reason and reported by key and path instead
+of the former eight-line budget, and routes the overlay refused because its texture array was full
+are counted separately (`OverlayGaps::saturated_textures`) so a full array is no longer
+indistinguishable from unusable pack data. Which reason dominates a real session is still unproven
+without a capture: the pack layer bound is `MAX_OVERLAY_LAYERS`, an index-space limit, while a
+served stack may ship thousands of distinct textures. Server-pack entities compile in memory per session (`compile_actor_pack`) into their own
 index space (pack rig ids from `PACK_RIG_ID_BASE`) and layer over the vanilla catalog: pack
 entities win by identifier, render scene geometry/artwork are rebuilt per session. Provisional,
 labeled incomplete: neutral material profile only (custom materials fall back; a controller's
