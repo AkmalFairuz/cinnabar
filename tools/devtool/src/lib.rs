@@ -1,4 +1,6 @@
+mod baseline;
 mod capture;
+mod cargo_failures;
 mod cli;
 mod commands;
 mod metadata;
