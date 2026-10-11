@@ -120,7 +120,9 @@ fn items(prefix: &str) -> Arc<DataSource> {
         "items",
         (0..CELLS)
             .map(|index| {
-                CollectionItem::default().with("#text", Scalar::Text(format!("{prefix}{index}")))
+                CollectionItem::default()
+                    .with("#text", Scalar::Text(format!("{prefix}{index}")))
+                    .with("#cell_size", Scalar::Num(20.0))
             })
             .collect(),
     );
@@ -271,7 +273,7 @@ fn grids_not_opted_in_build_every_cell() {
         "size": [10, 10],
         "bindings": [{
             "binding_type": "collection", "binding_collection_name": "items",
-            "binding_name": "#cell_size", "binding_name_override": "#size"
+            "binding_name": "#cell_size", "binding_name_override": "#size_binding_x_absolute"
         }]
     });
     let wide = json!({ "size": ["300%", "100%"] });
@@ -282,6 +284,20 @@ fn grids_not_opted_in_build_every_cell() {
     ] {
         draws_as_built_in_full(&library, "recipe_book", false);
     }
+}
+
+/// A cell a binding resizes builds every cell even in an opted-in grid, as placeholders would
+/// keep its literal size.
+#[test]
+fn cells_a_binding_resizes_are_all_built() {
+    let bound_size = json!({
+        "size": [10, 10],
+        "bindings": [{
+            "binding_type": "collection", "binding_collection_name": "items",
+            "binding_name": "#cell_size", "binding_name_override": "#size_binding_x_absolute"
+        }]
+    });
+    draws_as_built_in_full(&Cells::with(bound_size, json!({})), "items", false);
 }
 
 /// Draws `library`'s cells built in full and with grids listing `opted` virtualized, across

@@ -91,13 +91,16 @@ impl Binder<'_> {
 
 impl Binder<'_> {
     /// The cells the virtualized grid at bind key `grid` builds and the placeholder standing in
-    /// for the others, when the cell template has fixed pixel bounds, so a placeholder lays out
-    /// exactly where its cell would.
+    /// for the others, when the cell template has fixed pixel bounds no binding resizes, so a
+    /// placeholder lays out exactly where its cell would.
     fn grid_window(
         &mut self,
         grid: u64,
         template: &Arc<ResolvedControl>,
     ) -> Option<(Range<usize>, Arc<ResolvedControl>)> {
+        if binds_size(template) {
+            return None;
+        }
         let mut geometry = BTreeMap::new();
         for key in ["size", "min_size", "max_size"] {
             match template.properties.get(key) {
@@ -205,6 +208,23 @@ fn pixel_pair(value: &Value) -> Option<[f64; 2]> {
         [w, h] => Some([w.as_f64()?, h.as_f64()?]),
         _ => None,
     }
+}
+
+/// Whether one of `control`'s own bindings writes its size.
+fn binds_size(control: &ResolvedControl) -> bool {
+    let Some(Value::Array(bindings)) = control.properties.get("bindings") else {
+        return false;
+    };
+    bindings.iter().any(|binding| {
+        [
+            "binding_name",
+            "binding_name_override",
+            "target_property_name",
+        ]
+        .iter()
+        .filter_map(|key| binding.get(*key)?.as_str())
+        .any(|name| name.starts_with("#size_binding"))
+    })
 }
 
 /// A templated grid's cell count, or `None` when a filling grid's count waits
