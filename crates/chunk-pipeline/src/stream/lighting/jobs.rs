@@ -648,6 +648,8 @@ impl WorldStream {
                     && let Some(pending) = self.lighting.jobs.pending.get_mut(&neighbour)
                 {
                     let revision = pending.revision;
+                    // Its retained light was solved against this face's previous light.
+                    self.lighting.changed_cells.remove(&neighbour);
                     if urgent {
                         pending.urgent = true;
                         self.lighting.jobs.scan.push_front((neighbour, revision));
@@ -682,6 +684,7 @@ impl WorldStream {
             if let Some(pending) = self.lighting.jobs.pending.get_mut(&neighbour) {
                 let revision = pending.revision;
                 let effective_urgent = urgent || pending.urgent;
+                self.lighting.changed_cells.remove(&neighbour);
                 if effective_urgent {
                     pending.urgent = true;
                 }
