@@ -46,6 +46,7 @@ fn shared_stack_fingerprint_timing() {
             &view,
             &blocks,
             false,
+            overlay_texture_layer_limit(),
             || None,
         ));
         black_box(pack_runtime::entity_pack::compile_session_entities(
@@ -257,7 +258,13 @@ fn join_part_timing() {
         crate::camera::aim_highlight::prepare_pack_textures(view);
     });
     time("blocks", &|view| {
-        compile_block_overlay(view, &Default::default(), false, BASE_MATERIAL_KEYS.get());
+        compile_block_overlay(
+            view,
+            &Default::default(),
+            false,
+            BASE_MATERIAL_KEYS.get(),
+            overlay_texture_layer_limit(),
+        );
     });
     time("icons", &|view| {
         compile_session_icons(view, &icon_keys, Default::default());

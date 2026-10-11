@@ -634,6 +634,7 @@ pub fn run(args: args::ClientArgs) -> Result<()> {
         loaded_assets.selected_path.clone(),
         args.language.as_deref(),
     );
+    crate::runtime::network::await_overlay_texture_device();
     let network = if connection_requested {
         match spawn_network(NetworkConfig {
             session_generation: 1,
