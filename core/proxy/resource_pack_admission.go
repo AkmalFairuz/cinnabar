@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -471,6 +472,7 @@ type preparedConnections struct {
 	connectPrepared             func(context.Context, dialerDownstream) (*preparedConnection, error)
 	resolveTarget               func(context.Context) (*resolvedUpstreamTarget, error)
 	serverTrust                 minecraft.ServerTrust // decides transfer hops to addressed NetherNet servers
+	addressNetwork              minecraft.Network     // nil probes transfer hops for NetherNet; set, it carries every hop
 	dialTarget                  func(context.Context, *resolvedUpstreamTarget, minecraft.Dialer) (upstreamSession, error)
 	captureResourcePackStack    func(upstreamSession, func(*resource.Pack) bool) (*selectedResourcePackStack, error)
 	resourcePackCache           minecraft.ResourcePackCache
@@ -514,11 +516,19 @@ func newPreparedConnections(upstreamAddress string, account *authcache.Account, 
 					return dialWithPreparedTransport(ctx, network, address, attempt.DialContextNetwork)
 				}
 			}
-			return dialMinecraftUpstream(ctx, networkForAddress(target, address, connections.serverTrust), address, dial)
+			return dialMinecraftUpstream(ctx, connections.hopNetwork(target, address), address, dial)
 		})
 	}
 	connections.captureResourcePackStack = captureSelectedResourcePackStack
 	return connections
+}
+
+// hopNetwork is the transport for address: the target's own, or a pre-login transfer hop's.
+func (connections *preparedConnections) hopNetwork(target *resolvedUpstreamTarget, address string) minecraft.Network {
+	if connections.addressNetwork != nil && !strings.EqualFold(address, target.address) {
+		return connections.addressNetwork
+	}
+	return networkForAddress(target, address, connections.serverTrust)
 }
 
 func dialMinecraftUpstream(
