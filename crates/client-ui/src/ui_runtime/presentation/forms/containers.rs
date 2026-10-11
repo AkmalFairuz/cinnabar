@@ -233,10 +233,13 @@ impl UiPresentationRuntime {
         };
         let cache = &mut self.form_presentation.container_cache;
         let catalog = renderer.catalog();
+        // Server ui files always come with a new catalog, which rebuilds the screen's binding.
+        let server_ui = renderer.server_ui;
         let drawn = renderer.draw(art, inputs, out, |env, root| {
             ScreenCache::render(
                 cache,
                 catalog,
+                server_ui,
                 reference,
                 &context,
                 &data,
@@ -399,6 +402,7 @@ impl ScreenCache {
     fn render(
         cache: &mut Option<Self>,
         catalog: &Arc<json_ui::Catalog>,
+        server_ui: bool,
         reference: &'static str,
         context: &json_ui::Context,
         data: &DataSource,
@@ -422,11 +426,7 @@ impl ScreenCache {
                 tree: None,
                 measures: json_ui::MeasureCache::default(),
                 laid: None,
-                binding: {
-                    let mut binding = json_ui::BindState::new();
-                    binding.virtualize_grid(super::recipe_book::COLLECTION);
-                    binding
-                },
+                binding: super::recipe_book::screen_binding(server_ui),
                 resolutions: json_ui::ResolveCache::default(),
                 text,
                 layouts: 0,
@@ -950,6 +950,7 @@ mod review_tests {
             let rendered = ScreenCache::render(
                 &mut cache,
                 &catalog,
+                false,
                 "chest.small_chest_screen",
                 &context,
                 &data,
