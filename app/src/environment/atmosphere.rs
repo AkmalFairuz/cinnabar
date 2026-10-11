@@ -183,6 +183,13 @@ pub(crate) fn derive_profiled_atmosphere_frame(
     )
 }
 
+/// Menu options and optional sky settings consumed by atmosphere updates.
+type AtmospherePreferences<'w> = (
+    Option<Res<'w, crate::menu::MenuRuntime>>,
+    Option<ResMut<'w, render::CloudVisibility>>,
+    Option<ResMut<'w, render::SkyboxSettings>>,
+);
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn update_atmosphere_frame(
     clock: Res<WorldClock>,
@@ -202,11 +209,7 @@ pub(crate) fn update_atmosphere_frame(
     settings: Res<crate::settings_runtime::RuntimeSettings>,
     mut display: Local<WeatherDisplay>,
     mut renderer_clock: Local<super::renderer_clock::RendererClock>,
-    preferences: (
-        Option<Res<crate::menu::MenuRuntime>>,
-        Option<ResMut<render::CloudVisibility>>,
-        Option<ResMut<render::SkyboxSettings>>,
-    ),
+    preferences: AtmospherePreferences,
     cameras: Query<&Transform, With<client_presentation::camera::FlyCamera>>,
 ) {
     let vision = vision
