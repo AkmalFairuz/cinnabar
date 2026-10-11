@@ -37,8 +37,7 @@ use std::fs;
 use std::{ffi::OsStr, io::Write, path::Path, sync::Arc};
 #[cfg(feature = "acceptance")]
 use {
-    crate::acceptance::model_witness::drive_model_witness,
-    crate::acceptance::world_ready::emit_world_ready,
+    crate::acceptance::{model_witness::drive_model_witness, world_ready::emit_world_ready},
     acceptance::transparent_witness::poll_transparent_witness_request,
 };
 mod logging;
@@ -58,7 +57,7 @@ use launcher::install_layout::InstallLayout;
 use {
     crate::{
         args,
-        block_use::{BlockUseRuntime, produce_block_use},
+        block_use::produce_block_use,
         camera::FlyCameraPlugin,
         environment::{
             self, EnvironmentContext, EnvironmentProfileRoute, WeatherState, WorldClock,
@@ -66,12 +65,9 @@ use {
             update_seasonal_foliage,
         },
         local_player::{publish_local_player_frame, resolve_camera_pose},
-        melee::{MeleeRuntime, SwingTracker, produce_melee},
+        melee::produce_melee,
         menu::{MenuRuntime, drive_menu_input, drive_menu_services},
-        movement::{
-            LocalMovementEffectTimeline, LocalMovementSpeedAuthority, LocalPhysicsController,
-            PhysicsAuthorityGate, advance_local_physics, send_movement_prediction_sync,
-        },
+        movement::{advance_local_physics, send_movement_prediction_sync},
         present_mode::{PresentModeRuntime, apply_present_mode},
         runtime::{
             network::{
@@ -100,7 +96,7 @@ use {
         session::{
             SessionController, drive_session, follow_server_transfer, recover_session_failure,
         },
-        survival_mining::{SurvivalMiningRuntime, produce_survival_mining},
+        survival_mining::produce_survival_mining,
         ui_runtime::{
             drain_inventory_authority, drive_chat_keyboard_input, drive_chat_ui_actions,
             drive_inventory_ui_actions, drive_server_form_input, drive_sign_editor,
@@ -112,6 +108,10 @@ use {
                 publish_ui_runtime,
             },
         },
+    },
+    client_interaction::movement::{
+        LocalMovementEffectTimeline, LocalMovementSpeedAuthority, LocalPhysicsController,
+        PhysicsAuthorityGate,
     },
     client_runtime::{
         endpoint::{preflight_bridge_endpoint, resolve_socket_dir},
@@ -176,11 +176,7 @@ pub(crate) fn configure_client_production_frame_systems(app: &mut App) {
     configure_client_authority_systems(app);
     configure_actor_render_systems(app);
     crate::audio::configure(app);
-    app.init_resource::<BlockUseRuntime>()
-        .init_resource::<crate::item_use::ItemUseRuntime>()
-        .init_resource::<SurvivalMiningRuntime>()
-        .init_resource::<MeleeRuntime>()
-        .init_resource::<SwingTracker>()
+    app.add_plugins(client_interaction::ClientInteractionPlugin)
         .init_resource::<client_presentation::server_camera::ServerCameraInstructions>()
         .init_resource::<client_presentation::local_player_camera_receipt::CameraPublicationAttempt>()
         .add_systems(
@@ -226,8 +222,9 @@ pub(crate) fn configure_client_production_frame_systems(app: &mut App) {
         )
         .add_systems(
             Update,
-            (publish_local_player_frame, publish_interaction_origin, crate::camera::aim_assist::publish_assisted_interaction, crate::camera::aim_highlight::publish, crate::block_use::retain_block_use_pick)
+            (publish_local_player_frame, publish_interaction_origin, crate::camera::aim_assist::publish_assisted_interaction, crate::camera::aim_highlight::publish)
                 .chain()
+                .before(client_state::ClientInteractionSet::RetainPick)
                 .in_set(LocalPlayerFrameSet::Interaction)
                 .in_set(ClientFrameSet::Interaction),
         )
@@ -250,7 +247,8 @@ pub(crate) fn configure_client_production_frame_systems(app: &mut App) {
         )
         .add_systems(
             Update,
-            crate::hotbar::select_hotbar_slot
+            crate::hotbar::flush_hotbar_selection
+                .in_set(client_state::ClientInteractionSet::HotbarSend)
                 .after(ClientFrameSet::SemanticFinalize)
                 .before(ClientFrameSet::ActorPreparation),
         )
@@ -259,7 +257,7 @@ pub(crate) fn configure_client_production_frame_systems(app: &mut App) {
             Update,
             produce_block_use
                 .after(ClientFrameSet::SemanticFinalize)
-                .after(crate::hotbar::select_hotbar_slot)
+                .after(crate::hotbar::flush_hotbar_selection)
                 .after(reconcile_world_stream_before_physics)
                 .before(ClientFrameSet::Physics),
         )
@@ -658,8 +656,9 @@ pub fn run(args: args::ClientArgs) -> Result<()> {
     } else {
         NetworkHandle::<PackApplication>::disconnected()
     };
-    let movement_ticker =
-        crate::movement::MovementTicker::with_epoch_publisher(network.physics_epoch_publisher());
+    let movement_ticker = client_interaction::movement::MovementTicker::with_epoch_publisher(
+        network.physics_epoch_publisher(),
+    );
     let diagnostics_enabled = args.acceptance_seconds.is_some() || args.metrics_out.is_some();
     let stage_profile_enabled =
         std::env::var_os(diagnostics::markers::STAGE_PROFILE).as_deref() == Some(OsStr::new("1"));

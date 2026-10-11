@@ -4,7 +4,6 @@ use timing::{LoadTimes, join};
 
 use super::{PHYSICS_REGISTRY_GENERATION_GUIDANCE, PHYSICS_REGISTRY_SHA256};
 use crate::args;
-use crate::movement::PhysicsCollisionRegistries;
 use anyhow::{Context, Result, bail};
 use assets::carriers::startup::{
     self as asset_startup, AssetSelection, AssetStartupError, LoadedAssets, LoadedHudAssets,
@@ -14,6 +13,7 @@ use assets::{
     RuntimeActorCatalog, RuntimeAudioCatalog, RuntimeAudioPcm, RuntimeBlockEntityAssets,
     RuntimeEquipmentCatalog, RuntimeParticleAssets, RuntimeUiAssets,
 };
+use client_interaction::movement::PhysicsCollisionRegistries;
 use launcher_host::session_cleanup::ScopedSessionDirectory;
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path, sync::Arc, time::Instant};
