@@ -54,8 +54,8 @@ type Queue = VecDeque<(Instant, Job)>;
 
 #[derive(Default)]
 struct Queues {
-    /// Work for a block the local player just changed, with its lane. Every worker, and a
-    /// browser's frame, takes it before any lane's backlog, so the change shows at once.
+    /// Work for a block the local player just changed, with its lane. Every worker takes it
+    /// before any lane's backlog, so the change shows at once.
     urgent: VecDeque<(Lane, Job)>,
     mesh: Queue,
     decode: Queue,
