@@ -1,3 +1,19 @@
+## Totem activation
+
+- Local totem activation retains the equipped item before later inventory or equipment updates
+  consume it, including when world publication is delayed.
+  Offhand takes precedence, retriggers replace the image, and a session change retires it.
+- The camera overlay spins and scales the flat item icon for forty client ticks. It samples
+  the current admitted item atlas, including texture replacements, reloads and removals.
+- Client time includes the partial tick and bounds elapsed time during stalls. An activation
+  starts on the current frame even when event publication precedes the UI clock update. Screen overlays
+  stay above the effect; HUD safe-area insets do not move or crop the camera animation.
+- Local activation starts the pack-authored Totem emitter at the player's native position,
+  following the player during emission. Remote status events do not create this emitter.
+- Deterministic activation regressions and full-client default/custom recordings pass,
+  including main-hand fallback, retriggering and remote/empty exclusions. Broader item action,
+  particle emission and performance gates remain open.
+
 ## Xbox Minecraft activity
 
 - The Rust client reports menus and the committed world default, Realm and experience

@@ -23,6 +23,7 @@ pub mod inventory_actions;
 pub mod inventory_drag;
 pub mod inventory_ingress;
 
+mod item_activation;
 pub mod item_facts;
 pub mod json_ui_assets;
 pub mod oreui_assets;
@@ -176,6 +177,9 @@ pub struct UiRuntime {
     dropped_unsent_chat_messages: u64,
     block_cracks: crate::block_cracks::BlockCracks,
     gameplay_hud: GameplayHudState,
+    item_activation: Option<item_activation::ItemActivation>,
+    pending_totem_snapshots: VecDeque<(u64, Option<u32>)>,
+    activation_clock: item_activation::ActivationClock,
     use_on_identity_evidence: use_on_identity_evidence::UseOnIdentityEvidence,
     forms: ServerFormStore,
     credits: credits::CreditsState,
@@ -274,6 +278,9 @@ impl UiRuntime {
             dropped_unsent_chat_messages: 0,
             block_cracks: crate::block_cracks::BlockCracks::default(),
             gameplay_hud: GameplayHudState::default(),
+            item_activation: None,
+            pending_totem_snapshots: VecDeque::new(),
+            activation_clock: item_activation::ActivationClock::default(),
             use_on_identity_evidence:
                 use_on_identity_evidence::UseOnIdentityEvidence::from_environment(session_id),
             forms: ServerFormStore::default(),
@@ -656,6 +663,9 @@ impl UiRuntime {
         self.block_cracks = crate::block_cracks::BlockCracks::default();
         self.sign_editor = sign_editor::SignEditor::default();
         self.gameplay_hud.clear();
+        self.item_activation = None;
+        self.pending_totem_snapshots.clear();
+        self.activation_clock = item_activation::ActivationClock::default();
         self.use_on_identity_evidence.reset(session_id);
         self.forms.clear();
         self.credits = credits::CreditsState::default();
