@@ -16,8 +16,9 @@ use crate::ui_runtime::presentation::inventory_pointer::InventoryCellHit;
 use crate::ui_runtime::presentation::screens::{SEARCH_TAB, Widget};
 use {super::super::HudFrame, ui::IconRef};
 
-/// The controller collection filled by the recipe book.
-const COLLECTION: &str = "recipe_book";
+/// The controller collection filled by the recipe book. Its cells have a literal pixel size,
+/// draw at most a few pixels past it, and bind only per-index focus and collection details once.
+pub(super) const COLLECTION: &str = "recipe_book";
 
 /// Vanilla crafting screen variables: radio indexes of the tabs
 /// and layout toggles.

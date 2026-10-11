@@ -479,7 +479,7 @@ impl<'a> Binder<'a> {
             // Which list this item reads, and how much of it, follows its item's own list.
             reads.add(reuse::Data::Length, &scoped, None);
         }
-        if self.state.virtual_grids && grid_template(control).is_some() {
+        if self.state.virtualizes(collection_name(control)) && grid_template(control).is_some() {
             reads.add_window(key);
         }
         let origin = GRID_BOUNDS

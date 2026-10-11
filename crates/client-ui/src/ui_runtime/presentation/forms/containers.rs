@@ -424,7 +424,7 @@ impl ScreenCache {
                 laid: None,
                 binding: {
                     let mut binding = json_ui::BindState::new();
-                    binding.virtualize_grids();
+                    binding.virtualize_grid(super::recipe_book::COLLECTION);
                     binding
                 },
                 resolutions: json_ui::ResolveCache::default(),

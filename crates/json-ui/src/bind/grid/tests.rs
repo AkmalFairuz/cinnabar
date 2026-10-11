@@ -1,4 +1,5 @@
-//! A virtualized grid draws and takes input exactly as one built in full.
+//! A virtualized grid draws and takes input exactly as one built in full, and only grids
+//! opted in virtualize.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -134,10 +135,11 @@ struct Session {
 }
 
 impl Session {
-    fn new(virtualized: bool) -> Self {
+    /// A session virtualizing grids that list `opted`.
+    fn new(opted: Option<&str>) -> Self {
         let mut state = BindState::new();
-        if virtualized {
-            state.virtualize_grids();
+        if let Some(collection) = opted {
+            state.virtualize_grid(collection);
         }
         Self {
             state,
@@ -228,37 +230,62 @@ fn count(control: &ResolvedControl, name: &str) -> usize {
 
 #[test]
 fn a_virtualized_grid_draws_as_one_built_in_full() {
-    draws_as_built_in_full(&Cells::new(), true);
+    draws_as_built_in_full(&Cells::new(), "items", true);
 }
 
 #[test]
 fn placeholders_take_the_cell_size_its_bounds_clamp() {
     draws_as_built_in_full(
         &Cells::with(json!({ "size": [10, 10], "min_size": [20, 20] }), json!({})),
+        "items",
         true,
     );
 }
 
+/// Like a recipe book slot: a shifted label and a selection frame a few pixels past the cell.
 #[test]
-fn cells_drawing_outside_their_rect_are_all_built() {
-    // Each label draws six rows above its cell, inside the view while the cell is below it.
-    let upward = json!({ "offset": [0, -60] });
-    draws_as_built_in_full(&Cells::with(json!({ "size": [10, 10] }), upward), false);
-    // A clipping cell keeps its shifted label inside it.
+fn cells_drawing_just_past_their_rect_virtualize() {
     draws_as_built_in_full(
         &Cells::with(
-            json!({ "size": [10, 10], "clips_children": true }),
-            json!({ "offset": [0, -4] }),
+            json!({ "size": [10, 10] }),
+            json!({ "offset": [0, -4], "size": ["100% + 5px", "100% + 5px"] }),
         ),
+        "items",
         true,
     );
 }
 
-/// Draws `library`'s cells built in full and virtualized across scrolls and data changes,
-/// asserting they match and that the virtualized grid builds few cells when it `virtualizes`.
-fn draws_as_built_in_full(library: &Cells, virtualizes: bool) {
+/// Cells a late build could not reproduce exactly stay fully built unless their grid opts in.
+#[test]
+fn grids_not_opted_in_build_every_cell() {
+    let once = json!({
+        "bindings": [{
+            "binding_type": "collection", "binding_collection_name": "items",
+            "binding_name": "#text", "binding_condition": "once"
+        }]
+    });
+    let bound_size = json!({
+        "size": [10, 10],
+        "bindings": [{
+            "binding_type": "collection", "binding_collection_name": "items",
+            "binding_name": "#cell_size", "binding_name_override": "#size"
+        }]
+    });
+    let wide = json!({ "size": ["300%", "100%"] });
+    for library in [
+        Cells::with(json!({ "size": [10, 10] }), once),
+        Cells::with(bound_size, json!({})),
+        Cells::with(json!({ "size": [10, 10] }), wide),
+    ] {
+        draws_as_built_in_full(&library, "recipe_book", false);
+    }
+}
+
+/// Draws `library`'s cells built in full and with grids listing `opted` virtualized, across
+/// scrolls and data changes, asserting they match and that few cells build when it `virtualizes`.
+fn draws_as_built_in_full(library: &Cells, opted: &str, virtualizes: bool) {
     let root = screen();
-    let (mut full, mut virtualized) = (Session::new(false), Session::new(true));
+    let (mut full, mut virtualized) = (Session::new(None), Session::new(Some(opted)));
     for (prefix, scroll) in [
         ("a", 0.0),
         ("a", 250.0),

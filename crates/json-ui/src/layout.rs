@@ -636,9 +636,19 @@ fn place_subtree<'a>(
         {
             child_rect = frame.place_box(child_rect);
         }
+        // A cell within a cell of the view counts as shown, as a highlight drawn past its rect
+        // reaches in from there.
         if placeholders.is_some()
             && child_shown
-            && !disjoint(child_rect, clip_for_child)
+            && !disjoint(
+                Rect {
+                    x: child_rect.x - child_rect.w,
+                    y: child_rect.y - child_rect.h,
+                    w: child_rect.w * 3.0,
+                    h: child_rect.h * 3.0,
+                },
+                clip_for_child,
+            )
             && let Some(index) =
                 collection_index(child).and_then(|index| usize::try_from(index).ok())
         {

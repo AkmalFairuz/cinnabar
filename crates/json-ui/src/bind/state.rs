@@ -77,8 +77,8 @@ pub struct BindState {
     pub(super) views_settled: bool,
     /// View notifications the last bind ran.
     pub(super) views_run: usize,
-    /// Whether large collection grids build only the cells around those layout shows.
-    pub(super) virtual_grids: bool,
+    /// Collections whose large grids build only the cells around those layout shows.
+    pub(super) virtual_grids: BTreeSet<String>,
     /// The cells each virtualized grid builds, by its key; the rest bind as placeholders.
     pub(super) grid_windows: KeyMap<Range<usize>>,
     /// Grids whose built cells moved since the last bind, which it rebuilds.
@@ -170,11 +170,20 @@ impl BindState {
         changed
     }
 
-    /// Lets each large collection grid build only the cells around those in view, binding the
-    /// rest as empty placeholders of its cell template's size. After each layout, pass its
+    /// Lets a large grid listing `collection` build only the cells around those in view, binding
+    /// the rest as empty placeholders of its cell template's size. After each layout, pass its
     /// report to [`Self::show_grid_cells`] and bind and lay out again while that returns `true`.
-    pub fn virtualize_grids(&mut self) {
-        self.virtual_grids = true;
+    ///
+    /// Only for a grid whose cells have a literal pixel size, draw less than a cell beyond their
+    /// rect, and read through `once` bindings only what stays fixed per index: a cell built late
+    /// must match one built with the grid.
+    pub fn virtualize_grid(&mut self, collection: &str) {
+        self.virtual_grids.insert(collection.to_owned());
+    }
+
+    /// Whether grids listing `collection` build only the cells around those in view.
+    pub(super) fn virtualizes(&self, collection: Option<&str>) -> bool {
+        collection.is_some_and(|name| self.virtual_grids.contains(name))
     }
 
     /// Moves each virtualized grid's built cells over the cells `report` laid out in view, with
