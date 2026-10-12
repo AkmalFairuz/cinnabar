@@ -143,7 +143,7 @@ fn death_reveal_preserves_the_reason_and_loading_retires_the_controls() {
     ] {
         view.death_controls_visible = controls;
         view.death_loading = loading;
-        let screen = super::super::menu_screens::screen_data(&view, &|_| None).unwrap();
+        let screen = ui_screens::menu_screens::screen_data(&view, &|_| None, 0).unwrap();
         let rendered = cache
             .render(
                 ScreenKey {
@@ -200,7 +200,8 @@ fn death_quit_popup_retains_the_modern_overlay_underneath() {
     ].map(|(path,text)| UiFile { path: path.into(), bytes: text.as_bytes().into() });
     let bytes = encode_ui_catalog([1; 32], &[], &[], &[], &files).unwrap();
     let carrier = Arc::new(RuntimeUiAssets::decode(&bytes).unwrap());
-    let mut presentation = UiPresentationRuntime::new(crate::test_support::fixture_font()).unwrap();
+    let mut presentation =
+        UiPresentationRuntime::new(ui_engine::test_support::fixture_font()).unwrap();
     presentation.enable_json_ui(carrier).unwrap();
     let mut view = MenuView::new(false, "Player".into());
     view.visible = true;

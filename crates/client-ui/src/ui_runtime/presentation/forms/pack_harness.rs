@@ -8,14 +8,14 @@ use std::{
     sync::Arc,
 };
 
-use assets::{RuntimeFontCatalog, RuntimeUiAssets};
+use assets::RuntimeFontCatalog;
 use protocol::{FormKind, FormRequestEvent, ServerFormModel, TextMenuForm, UiEvent};
 use ui::{DpiScale, UiNode, UiVisual};
 
 use super::super::UiPresentationRuntime;
 use super::ServerUiPack;
-use crate::test_support::fixture_font;
 use crate::ui_runtime::{SequencedUiEvent, UiRuntime};
+use ui_engine::test_support::fixture_font;
 use ui_engine::text_metrics::TextMetrics;
 
 const PACK_ENV: &str = "CINNABAR_FORM_PACK_DIR";
@@ -52,25 +52,6 @@ fn local(path: &str) -> std::path::PathBuf {
         .join(path)
 }
 
-/// Loads the installed UI carrier, reporting an absent fixture and rejecting malformed data.
-pub fn carrier() -> Option<Arc<RuntimeUiAssets>> {
-    let path = local("assets/compiled/vanilla-v1.mcbeui");
-    let bytes = match std::fs::read(&path) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            eprintln!(
-                "skipping local UI fixture test: missing {}; make assets",
-                path.display()
-            );
-            return None;
-        }
-        Err(error) => panic!("read UI fixture {}: {error}", path.display()),
-    };
-    Some(Arc::new(
-        RuntimeUiAssets::decode(&bytes).expect("decode installed UI fixture"),
-    ))
-}
-
 /// Loads shipped carriers from the checkout, or an isolated snapshot fixture directory.
 pub fn font() -> Arc<RuntimeFontCatalog> {
     let directory = std::env::var_os("CINNABAR_FONT_CARRIER_DIR")
@@ -83,7 +64,7 @@ pub fn font() -> Arc<RuntimeFontCatalog> {
         .ok()
         .and_then(|bytes| RuntimeFontCatalog::decode(&bytes, manifest).ok())
         .map_or_else(fixture_font, |font| Arc::new(font.with_coverage_pages()));
-    crate::ui_runtime::oreui_fonts::install(base, &directory)
+    oreui::fonts::install(base, &directory)
 }
 
 /// Every file of an unpacked pack directory as `(pack-relative path, bytes)`.
@@ -275,7 +256,7 @@ pub fn render(
 }
 
 pub fn engine_presentation() -> Option<UiPresentationRuntime> {
-    let carrier = carrier()?;
+    let carrier = ui_engine::test_support::carrier()?;
     let mut presentation =
         UiPresentationRuntime::new(Arc::new((*font()).clone().with_coverage_pages())).unwrap();
     presentation.enable_json_ui(carrier).unwrap();

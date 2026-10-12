@@ -10,6 +10,10 @@ End-rod terrain coverage now includes the six facing states, separate shaft/base
 mapping and an original-art GPU fixture. This bounded geometry correction leaves the
 exhaustive residual-family, world-join and hardware performance gates open.
 
+Common farmland crops now retain four lowered rows with stage-specific artwork.
+Compiler regressions cover all eight growth states and both network-ID modes;
+full crop presentation parity and the broader phase gates remain open.
+
 ## P2.5-NATIVE-BIOME
 
 | Field | Evidence |
@@ -287,3 +291,14 @@ Admitted live biome identifiers and climate now travel with the session tint reg
 the vendored client session crate is removed. Startup ordering, terminal transfers and
 disconnects, and the one-shot initialization keep their regression coverage through a scripted
 core; those tests have not been executed locally. No existing completion entry is advanced.
+
+## Loom banner previews
+
+JSON-UI banner controls draw ordered front-cloth layers from the active artwork. Loom pattern choices and results publish bounded pattern and dye bindings, including existing banner layers. No existing completion entry is advanced by this change; the remaining gates are recorded in `plan.md`.
+
+## Protocol codec swap
+
+`protocol` uses protocolgen's vendored contract crate as its only codec; Valentine and its
+normalization machinery are gone. Packet routing and UI budgets derive from the generated packet
+table and field sites rather than hand-maintained ID lists. The ported tests have not been
+executed locally. No existing completion entry is advanced.
