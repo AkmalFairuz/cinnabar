@@ -14,8 +14,8 @@ use {
     bevy::window::{CursorOptions, PrimaryWindow},
     client_runtime::network::NetworkHandle,
     client_shell::menu::MenuRuntime,
+    client_shell::ui_resources::{UiPresentationResource, UiRuntimeResource},
     client_state::ClientFrameSet,
-    client_ui::ui_runtime::{UiRuntime, presentation::UiPresentationRuntime},
     mod_host::{ModGrants, ModHost},
     std::{path::Path, time::Duration},
     web_time::Instant,
@@ -193,7 +193,7 @@ fn install(app: &mut App, hosts: Vec<ModHost>) {
         match font::load(Path::new(&path)).and_then(|font| {
             let font = std::sync::Arc::new(font);
             app.world_mut()
-                .get_resource_mut::<UiPresentationRuntime>()
+                .get_resource_mut::<UiPresentationResource>()
                 .ok_or_else(|| "presentation is unavailable".to_owned())?
                 .set_mod_panel_font(Some(font.clone()))
                 .map_err(|error| error.to_string())?;
@@ -273,9 +273,9 @@ fn drive_mod(
     focus: Option<Res<client_state::CursorFocus>>,
     driven: Option<Res<client_state::DrivenInput>>,
     windows: Query<(&Window, Option<&CursorOptions>), With<PrimaryWindow>>,
-    mut ui: ResMut<UiRuntime>,
+    mut ui: ResMut<UiRuntimeResource>,
     menu: Option<Res<MenuRuntime>>,
-    mut presentation: ResMut<UiPresentationRuntime>,
+    mut presentation: ResMut<UiPresentationResource>,
     time_override: Option<ResMut<VisualTimeOverride>>,
     mut gameplay: gameplay::GameplayContext,
     interaction: Option<ResMut<interaction::ModInteraction>>,
@@ -566,6 +566,7 @@ fn keybind_allowed(window_focused: bool, input_absorbed: bool) -> bool {
 #[cfg(all(test, feature = "local-mods"))]
 mod tests {
     use super::*;
+    use client_ui::ui_runtime::UiRuntime;
 
     #[test]
     fn no_mod_path_registers_no_runtime_or_systems() {
@@ -597,8 +598,8 @@ mod tests {
             return;
         };
         let mut app = App::new();
-        app.insert_resource(presentation)
-            .insert_resource(UiRuntime::new(1))
+        app.insert_resource(UiPresentationResource(presentation))
+            .insert_resource(UiRuntimeResource(UiRuntime::new(1)))
             .insert_resource(client_state::PlayerRuntime(
                 ::player_state::PlayerState::new(1),
             ))
@@ -637,7 +638,7 @@ mod tests {
             .resource::<client_state::PlayerRuntime>()
             .clone();
         app.world_mut()
-            .resource_mut::<UiPresentationRuntime>()
+            .resource_mut::<UiPresentationResource>()
             .build(
                 &player_runtime,
                 &UiRuntime::new(1),

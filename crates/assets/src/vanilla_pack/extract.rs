@@ -115,7 +115,7 @@ impl Read for SharedFile {
         let read = std::os::unix::fs::FileExt::read_at(&*self.file, buffer, self.position)?;
         #[cfg(windows)]
         let read = std::os::windows::fs::FileExt::seek_read(&*self.file, buffer, self.position)?;
-        // Without positional reads, seek then read; these targets extract without threads.
+        // Without positional reads, clones share the OS cursor, so seek on every read.
         #[cfg(not(any(unix, windows)))]
         let read = {
             let mut file = &*self.file;

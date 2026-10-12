@@ -82,6 +82,15 @@ memory discovery belongs to `launcher-host`. Existing menu and integration tests
 remain enabled in their owning crates. Compilation, execution and live behavior
 remain unverified for these moves; they do not close a parity gate.
 
+## Bevy-free client UI
+
+`client-ui` has no Bevy dependency. It reads `semantic-input` keyboard keys and wheel units,
+`glam` math, `tracing` logs and a camera eye position. `client-shell` owns the ECS wrappers
+for UI authority and presentation, and maps Bevy device codes to semantic keys and HID usages.
+`app` owns gameplay cursor capture, FOV input collection, screen input suppression and the
+prepared publication resource. `client-presentation` borrows UI state from those app systems.
+This move has not been compiled or executed and closes no parity gate.
+
 ## Extension crate ownership
 
 `client-extensions` owns local component loading and load-order merging, environment
@@ -506,7 +515,7 @@ these changes do not close the movement, camera, or actor parity gates.
   120 Hz and an uncapped test bound tick flush delay and 20 Hz send jitter to 3 ms;
   manual recording clocks keep their requested steps. Live movement acceptance remains open.
 
-- Actor catch-up uses `world::MAX_TICKS_PER_FRAME`. Prediction and live per-tick actor
+- Actor catch-up uses `simulation_clock::MAX_TICKS_PER_FRAME`. Prediction and live per-tick actor
   advancement share one clock step, including server-defined interaction boxes after a stall.
   Deterministic regression coverage does not close live animation or movement acceptance.
 
@@ -2808,11 +2817,19 @@ texture, tint and sample point are unmatched), pack attachables (held/worn on pl
 (pack bindings win by item identifier; pack property defaults seed only from `entities/` in
 resource packs), rigs depending on vanilla clips are attributed as fallbacks; pack precedence follows the Bedrock stack (last entry wins). No vanilla acceptance gate is closed by this change.
 
+2026-10-12 protocol session layer: `protocol::login` owns the play stream on the core's session
+endpoint. Its spawn sequence keeps the first item registry, defers every other packet to play in
+order, records whether terrain preceded spawn and sends loading-end and initialization once the
+app presents the world. The core's terminal Transfer and Disconnect are retained directly rather
+than as server packets. The vendored client session crate and its crypto dependencies are gone;
+Valentine stays the only codec until the generated contract crate replaces it. Behaviour and
+parity are unchanged; the ported startup and play tests are unexecuted until CI.
+
 2026-10-12 protocol boundary: `protocol` exposes only Cinnabar-owned types: an opaque
 `Packet`, owned `GameData` startup facts, the login skin and version constants, the pack
 handoff, transfer and error types. Other crates' tests use `protocol::test_support`; wire-layout
-tests compile inside the crate. Valentine and Jolyne remain its codec and session layer, and the
-architecture gate rejects any other crate depending on them. Behaviour and parity are unchanged.
+tests compile inside the crate. Valentine remains its codec, and the architecture gate rejects
+any other crate depending on it. Behaviour and parity are unchanged.
 
 2026-09-30 protocol-2193 wire target (owner decision): Cinnabar moves from
 Bedrock 1.26.44 / protocol 2168 to 1.26.50 / protocol 2193, because Gophertunnel
@@ -5508,8 +5525,8 @@ tick states; correction/rewind handling (`CorrectPlayerMovePrediction`).
     `zenomc.org:19197`, following the same candidate/free-camera scenario and five-minute
     minimum used by the other external targets. Zeno is the low-population official-BDS
     server-authority target for movement rejection and correction checks.
-  - Pre-existing, out-of-scope observation: adding `--all-features` to Clippy fails in the
-    vendored `crates/protocol/vendor/jolyne` crate because optional dependencies are not
+  - Pre-existing, out-of-scope observation: adding `--all-features` to Clippy failed in the
+    since-removed vendored client session crate because its optional dependencies were not
     vendored. This work did not cause that failure, and CI does not use `--all-features`.
 
 - **Phase 3 local BDS smoke findings (2026-07-26, four runs at BDS 1.26.32.2).**
@@ -7302,7 +7319,11 @@ custom-block collision admission. Collision lists retain at most 256
 primitives. Per-state collision and selection overrides now resolve once at session
 admission and register in both network-ID spaces. Captured bottom/top slab fixtures
 match their authored geometry heights and retain stationary support for 100 ticks.
-Arbitrary collision transformations remain incomplete. The definition tree
+A state's authored `minecraft:transformation` now rotates, scales and translates its
+explicit collision and selection boxes about the block centre through the same
+transform the overlay applies to geometry, so face-attached blocks collide on their
+authored face. Rotation and scale pivots are still ignored for geometry and boxes,
+so pivoted transformations remain incomplete. The definition tree
 coalesces Float and Double tags, so exact rejection of Double-only collision fields
 remains incomplete. Unbound looping effects now stop emission after their first
 active/sleep cycle and let existing particles drain; bound effects can restart
@@ -7731,6 +7752,18 @@ Composters retain inward walls and a level-dependent floor. Cauldrons retain the
 
 Incomplete parity: cauldron block-actor potion and dyed-water colours require runtime block-actor data; their state-only visual remains provisional. Enhanced lighting and performance acceptance remain open.
 
+Compiled pack and admitted server use modifiers share one simulation-clock
+duration conversion: seconds use component float precision and
+discard fractional ticks. Equipment carriers require a rebuild for this change.
+Use-kind, appetite, movement and cooldown admission is compiled against an
+independent item inventory; its complete native coverage remains incomplete. Component-version precedence and malformed or extreme-duration
+parity remain unverified.
+
+The simulation clock values and finite component-duration conversion share the
+`simulation-clock` crate. Protocol consumers no longer depend on the world model
+for timing. Complete native use-kind, appetite, movement and cooldown coverage
+remains incomplete.
+
 Mount equipment admission is incomplete. Each compiled entity symbol carries a
 typed unresolved, empty, supported or provisional equipment disposition. The
 existing eleven mount layouts are retained as provisional facts in one
@@ -7740,7 +7773,7 @@ replacements. Unknown mounts no longer inherit horse equipment cells in JSON-UI,
 fallback drawing, pointer handling and quick-move routing. Active equippable
 components, accepted items, conditional activation, advertised custom bases and
 later mount layouts remain incomplete and do not close the entity parity gate.
-Entity carrier 17 requires a `make assets` rebuild.
+Entity carrier 21 requires a `make assets` rebuild.
 
 ### Compiled furnace fuel admission (incomplete)
 
@@ -7770,6 +7803,16 @@ numerical behavior; unclassified states remain unresolved and keep the previous 
 numerical defaults. No ordinary movement classification is inferred from absence of a special
 rule. Complete native ordinary/special coverage, custom session movement components and
 all provisional rule values still require verification before this gate can close.
+Rig placement and target-rotation frames are compiled and carried with the selected
+rig. Their compatibility source preserves existing absolute-frame routes, while
+other identities remain explicitly unresolved and retain the body-yaw fallback.
+Presentation and target-rotation queries consume cached frames. Complete native
+class coverage, custom advertised-base admission, active component overrides and
+ordinary-body frame classification remain incomplete. Camera-query presence does
+not establish a placement frame.
+
+Item-use descriptor admission is incomplete. The carrier records explicit unresolved items against the independently collected item-visual inventory. Gameplay, animation durations, consume audio, first-person consumption and cooldown publication read numerical admissions with session component overlays. A duration alone grants no use kind or movement penalty. The stock compatibility catalog, complete native use-kind census, authored cooldown timing, special appetite modes and conflicting component/class semantics remain provisional. Authored and session facts share whole-tick conversion. Cooldown quantization and component-version precedence remain provisional.
+
 
 ## Brewing stand models
 
@@ -7785,9 +7828,21 @@ performance parity remain incomplete.
 
 Effective item durability is shared through required entity-carrier descriptors and session registry admission. Unknown entries and invalid declared maxima stay unresolved; UI and elytra gameplay read the admitted numeric-ID fact. This gate remains incomplete: the full damageable item inventory, native class bindings, numeric component bounds and all network replacement behavior still need verification. The pinned base table preserves the existing positive values and its coverage guard checks their membership in the independent retail inventory.
 
+Compiled entity interaction traits remain incomplete. The entity carrier admits separate
+pick, placement-obstruction and aim dispositions, checks every independently collected
+entity identity, and retains the existing class routes as provisional compatibility data.
+Actor admission resolves advertised bases once, preserves the first advertisement,
+refreshes earlier actors, and caches numeric dispositions for frame and ray consumers.
+Unadvertised identities and unadmitted nonempty bases remain unresolved. Empty
+advertised bases retain an explicit provisional generic-mob disposition. Complete native constructor,
+mutable component, spectator pick/obstruction and class inventories are still open;
+the generic-mob disposition remains provisional and does not close a parity gate.
+
+Compiled seat descriptors are incomplete. Every independently collected entity has a seat admission, including unresolved definitions. Authored base layouts, bounded rider counts, literal rotations and Molang rotation references are compiled before runtime; component-group names no longer select layouts. Actual group activation and rotation-expression evaluation remain unresolved, so those layouts retain streamed poses. Passenger ordering, mutable rideable components, session behavior overlays and complete native layout coverage remain open. Static count selection preserves the existing compatibility order and is provisional.
+
 ## Held-item grip admission (incomplete parity)
 
-Item grip facts are compiled into entity carrier 17, checked against the separate
+Item grip facts are compiled into entity carrier 21, checked against the separate
 retail identity inventory and copied through numeric item admission into equipment
 input. Unknown names cannot borrow a tool grip. Explicit session flags, including
 false, replace the compiled upright choice. The existing built-in grip and rod-art
@@ -7795,3 +7850,10 @@ choices remain provisional compatibility data. Complete native, metadata, versio
 and custom base-item coverage is incomplete. Optional Java animation name routing
 remains a separate incomplete admission path. This does not close the complete
 equipment parity gate. `make assets` rebuilds carriers that lack these records.
+
+Item-use animation routes and charged projectile drawing roles are typed admissions.
+Local and remote equipment read numerical registry facts, including generation replacements;
+item names do not select bow or crossbow use frames. Unsupported charged projectile metadata
+has no admitted drawing frame. Complete native item/stack metadata coverage and stack-NBT
+cache acceptance remain incomplete. Authored and session use cooldown fractions share the
+provisional component-precision conversion; native cooldown initialization is unverified.
