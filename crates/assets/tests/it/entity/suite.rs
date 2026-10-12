@@ -185,6 +185,7 @@ fn entity_carrier_rejects_transitive_geometry_inheritance_cycles() {
 fn entity_carrier_rejects_unresolved_inherited_bone_parents() {
     let mut compiled = inherited_geometry_fixture();
     compiled.geometries[1].bones = vec![EntityGeometryBone {
+        locators: Box::default(),
         name: "nose".into(),
         parent: Some("missing".into()),
         pivot: None,
@@ -479,6 +480,7 @@ pub(super) fn carrier_v4_fixture() -> CompiledEntityAssetsV4 {
             texture_width: 32,
             texture_height: 32,
             bones: vec![entity::EntityGeometryBone {
+                locators: Box::default(),
                 name: "root".into(),
                 parent: None,
                 pivot: None,
@@ -631,6 +633,7 @@ pub(super) fn carrier_v4_fixture() -> CompiledEntityAssetsV4 {
         .into_boxed_slice(),
         item_visuals: vec![ItemVisualDefinition {
             grip: assets::item::grip::ItemGrip::Unresolved,
+            glint: assets::item::glint::ItemGlint::Unresolved,
             fuel: assets::item::fuel::ItemFuel::Unresolved,
             durability: assets::item::durability::ItemDurability::Unresolved,
             armour: assets::item::armour::ItemArmour::Unresolved,

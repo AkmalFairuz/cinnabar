@@ -5,15 +5,15 @@ mod audio;
 mod audio_pcm;
 pub mod bamboo;
 pub mod banner;
+pub mod beacon;
+mod beacon_tints;
 mod biome;
 mod biome_noise;
 pub mod blob;
 mod block_entity;
 pub mod block_entity_geometry;
 mod block_names;
-mod block_presentation_state;
-pub use block_presentation_state::pinned_block_presentation_states;
-pub use block_presentation_state::{BlockPresentationState, BlockPresentationStates, PortalAxis};
+pub mod block_presentation_state;
 pub mod block_shapes;
 pub mod carriers;
 pub mod compiled;
@@ -41,6 +41,7 @@ mod light_registry;
 mod material_keys;
 mod material_variations;
 mod model;
+pub mod native_material;
 mod ogg;
 pub mod oreui_icons;
 mod particle;
@@ -50,7 +51,7 @@ mod potion;
 mod provenance;
 pub mod registry;
 mod runtime;
-mod seasonal_foliage;
+pub mod seasonal_foliage;
 mod server_lang;
 mod session_entities;
 mod skin_geometry;
@@ -91,6 +92,7 @@ pub use audio_pcm::{
     MAX_AUDIO_PCM_CARRIER_BYTES, MAX_AUDIO_PCM_SOURCE_BYTES, RuntimeAudioPcm, encode_audio_pcm,
     reviewed_audio_pcm_identity, validate_audio_pcm_catalog,
 };
+pub use beacon_tints::BeaconTintCatalog;
 pub use biome::{
     BIOME_REGISTRY_MAGIC, BIOME_RULE_FLAG_GRASS_SHADED, BIOME_TINT_FLAG_SEASONAL_FOLIAGE,
     BIOME_TINT_FLAG_SWAMP_GRASS, BiomeRegistryRecord, BiomeRule, CompiledBiomeAssets,
@@ -123,7 +125,8 @@ pub use compiled::{
     MAX_MATERIALS, MAX_TEXTURE_LAYERS, Material, TEXTURE_LAYER_MASK, material_leaf_ao_exponent,
 };
 pub use effects::{
-    EFFECT_DESCRIPTORS, EffectDescriptor, effect_descriptor, effect_registry_version,
+    EFFECT_DESCRIPTORS, EffectDescriptor, effect_descriptor, effect_descriptor_by_identifier,
+    effect_registry_version,
 };
 pub use entity::{
     ACTOR_GLINT_TEXTURE_IDENTIFIER, BED_GEOMETRY_IDENTIFIER, CAPE_GEOMETRY_IDENTIFIER,
@@ -135,10 +138,11 @@ pub use entity::{
     EntityControllerAnimation, EntityControllerAnimationTarget, EntityControllerState,
     EntityControllerTransition, EntityDependency, EntityDependencyKind, EntityDependencyResolution,
     EntityGeometry, EntityGeometryBone, EntityGeometryBounds, EntityGeometryCube,
-    EntityGeometryFaceUv, EntityGeometryFaceUvs, EntityGeometryInheritance, EntityGeometryScalar,
-    EntityGeometryTextureMesh, EntityGeometryUv, EntityRenderCandidate, EntityRenderData,
-    EntityRenderGeometry, EntityRenderLayer, EntityRenderMaterial, EntityRenderMaterialState,
-    EntityRenderSlot, EntityRenderVisibility, EntityRigAnimationBinding, EntityRigBinding,
+    EntityGeometryFaceUv, EntityGeometryFaceUvs, EntityGeometryInheritance, EntityGeometryLocator,
+    EntityGeometryLocatorBinding, EntityGeometryScalar, EntityGeometryTextureMesh,
+    EntityGeometryUv, EntityRenderCandidate, EntityRenderData, EntityRenderGeometry,
+    EntityRenderLayer, EntityRenderMaterial, EntityRenderMaterialState, EntityRenderSlot,
+    EntityRenderVisibility, EntityRigAnimationBinding, EntityRigBinding,
     EntityRigControllerBinding, EntityRigFallback, EntityRigGeometryBinding,
     LEGACY_ENTITY_GEOMETRY_PATH, MAX_ENTITY_ANIMATION_CHANNELS, MAX_ENTITY_ANIMATION_CLIPS,
     MAX_ENTITY_ANIMATION_KEYFRAMES, MAX_ENTITY_ASSET_PATH_BYTES, MAX_ENTITY_ASSET_SOURCES,
@@ -151,14 +155,14 @@ pub use entity::{
     MAX_ENTITY_RENDER_SLOTS, MAX_ENTITY_RENDER_VISIBILITY, MAX_ENTITY_RIG_ANIMATIONS,
     MAX_ENTITY_RIG_BINDINGS, MAX_ENTITY_RIG_CONTROLLERS, MAX_ENTITY_RIG_GEOMETRIES,
     MAX_ENTITY_SOURCE_BYTES, MAX_ENTITY_TEXTURE_DIMENSION, MAX_ENTITY_TOTAL_SOURCE_BYTES,
-    MAX_MOLANG_COLLECTION_ITEMS, MAX_MOLANG_COLLECTION_ITEMS_TOTAL, MAX_MOLANG_COLLECTIONS,
-    MAX_MOLANG_EXPRESSIONS, MAX_MOLANG_LOOP_DEPTH, MAX_MOLANG_LOOP_ITERATIONS, MAX_MOLANG_OPS,
-    MAX_MOLANG_OPS_PER_EXPRESSION, MAX_MOLANG_QUERY_ARGUMENTS, MAX_MOLANG_STACK_DEPTH,
-    MAX_MOLANG_STRING_BYTES, MOLANG_QUERIES, MOLANG_QUERY_DESCRIPTORS,
-    MOLANG_QUERY_MANIFEST_VERSION, MolangBranch, MolangCall, MolangCollection,
-    MolangCollectionItem, MolangEaseCurve, MolangEaseMode, MolangFunction, MolangOp, MolangProgram,
-    MolangQuery, MolangQueryArguments, MolangQueryDescriptor, MolangQueryHandler,
-    MolangQueryOutput, MolangQuerySupport, MolangSymbol, MolangSymbolKind,
+    MAX_GEOMETRY_LOCATORS, MAX_MOLANG_COLLECTION_ITEMS, MAX_MOLANG_COLLECTION_ITEMS_TOTAL,
+    MAX_MOLANG_COLLECTIONS, MAX_MOLANG_EXPRESSIONS, MAX_MOLANG_LOOP_DEPTH,
+    MAX_MOLANG_LOOP_ITERATIONS, MAX_MOLANG_OPS, MAX_MOLANG_OPS_PER_EXPRESSION,
+    MAX_MOLANG_QUERY_ARGUMENTS, MAX_MOLANG_STACK_DEPTH, MAX_MOLANG_STRING_BYTES, MOLANG_QUERIES,
+    MOLANG_QUERY_DESCRIPTORS, MOLANG_QUERY_MANIFEST_VERSION, MolangBranch, MolangCall,
+    MolangCollection, MolangCollectionItem, MolangEaseCurve, MolangEaseMode, MolangFunction,
+    MolangOp, MolangProgram, MolangQuery, MolangQueryArguments, MolangQueryDescriptor,
+    MolangQueryHandler, MolangQueryOutput, MolangQuerySupport, MolangSymbol, MolangSymbolKind,
     PACK_EQUIPMENT_INDEX_BASE, PACK_RIG_ID_BASE, RuntimeEntityAssets, bind_molang_queries,
     encode_entity_blob, entity_render_pattern_matches, interactions, item_use, molang_call,
     molang_program_stack, placement, seats as entity_seats, validate_entity_geometry_inheritance,
@@ -191,7 +195,7 @@ pub use font::{
 };
 pub use fsb::{DecodedSound, FsbError, MAX_FSB_INPUT_BYTES, MAX_FSB_PCM_BYTES, decode_fsb5};
 pub use glyph_sheet::{CellGlyph, GlyphAtlas, GlyphSheet, SHEET_GRID, SheetGlyph};
-pub use glyph_sheet::{extract_cells, pack_cells, texel_size_64};
+pub use glyph_sheet::{extract_cells, is_private_use_glyph, pack_cells, texel_size_64};
 pub use hud::{
     HUD_CARRIER_MAGIC, HUD_CARRIER_VERSION, HUD_ICONS_SHEET_SIZE, HUD_SOURCE_MANIFEST_SHA256,
     HudCatalogError, HudTexture, HudTextureRole, MAX_HUD_TEXTURE_BYTES, RuntimeHudCatalog,
@@ -254,24 +258,22 @@ pub use pinned_content::{
     active_content_registry_protocol, pinned_block_registry_bytes, pinned_block_sequential_id,
     pinned_world_provenance,
 };
-pub use potion::vanilla_potion_variant;
+pub use potion::{
+    POTION_DESCRIPTORS, PotionDescriptor, PotionEffect, potion_descriptor, vanilla_potion_variant,
+};
 pub use provenance::{
     BlobProvenance, VANILLA_SOURCE_MANIFEST, VanillaSource, canonical_source_manifest_sha256,
     vanilla_source, vanilla_source_manifest_sha256,
 };
 pub use registry::{
-    BlockFlags, CollisionBox, CollisionConfidence, CollisionSeed, ContributorRole, ModelFamily,
-    ModelState, ModelStateField, RegistryProvenance, RegistryRecord, read_registry,
+    BeaconTint, BlockFlags, CollisionBox, CollisionConfidence, CollisionSeed, ContributorRole,
+    ModelFamily, ModelState, ModelStateField, RegistryProvenance, RegistryRecord, read_registry,
     read_registry_for_protocol, registry_header_protocol,
 };
 pub use runtime::{
     BlockOverlay, MaterialOverride, NetworkIdMode, ResolvedBlock, ResolvedFace, RuntimeAssets,
     SequentialIdRemap, ServerDefinedBlock, server_defined_blocks,
     server_defined_blocks_for_registry,
-};
-pub use seasonal_foliage::{
-    SEASONAL_FOLIAGE_COLD_THRESHOLD, SEASONAL_FOLIAGE_COUNT, SEASONAL_FOLIAGE_EXPOSED_OFFSET,
-    SeasonalFoliageBlock, seasonal_foliage_cell_shelters, seasonal_foliage_palette_index,
 };
 pub use server_lang::{MAX_SERVER_LANG_INPUT_BYTES, ServerLangOverlay};
 pub use session_entities::SessionEntityPack;

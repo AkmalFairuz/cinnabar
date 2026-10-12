@@ -600,6 +600,11 @@ these changes do not close the movement, camera, or actor parity gates.
 - Named schedule traces and bounded frame recordings separate main work, render
   handoff, drawable acquisition, command submission and presentation. Metal
   timestamp queries use owned render passes and leave uncovered stages absent.
+- Ordinary direct terrain draws retain CPU-selected units of at most 64 quads,
+  compact visible lists after current occlusion results, and submit one instanced
+  draw per pipeline and list page. The per-section fallback and transparency paths
+  remain available. Incomplete: Metal pixel identity and paired hardware captures
+  must qualify the change before closing rendering or frame-budget acceptance.
 - Unchanged hand and cloud uniforms, inactive portals and empty item scenes skip
   redundant staging work. Regression tests assert allocations, writes and retained
   buffers; hardware captures measure elapsed time separately.
@@ -630,9 +635,16 @@ these changes do not close the movement, camera, or actor parity gates.
   establish native first-appearance timing, join latency, no-pop-in acceptance or release
   frame budgets; those gates remain open.
 - Recurring hand, UI viewport and particle writes share bounded retained GPU
-  staging. Allocation regressions cover real Metal owners; lifecycle and byte-order
-  tests cover asynchronous reuse and fallback. Attach-only native samples confirm
-  staging-allocation mutex contention, drawable waits and scheduler delays.
+  staging. Terrain arena writes use a separate pool that starts at three 120 Hz
+  frames of the publication target rate and grows after missed frames, at most
+  2 MiB per frame, to a 32 MiB ceiling. Abutting records share one copy, batches
+  stage what fits and queue only the overflow, and a growth slice encodes staged
+  writes before it copies. Allocation regressions cover real Metal owners; lifecycle
+  and byte-order tests cover asynchronous reuse, partial staging and fallback.
+  Attach-only native samples confirm staging-allocation mutex contention, drawable
+  waits and scheduler delays.
+- Incomplete: one 32 blocks/s flight capture sized the terrain pool's growth; its
+  staged share after growth, the 128 blocks/s route and joins remain unmeasured.
 - Incomplete: the synthetic fixed-camera fixture is not the populated-lobby/flight
   release replay; hidden frames do not establish displayed FPS. Three paired runs
   at each resolution reduce measured maxima but do not consistently improve p99.
@@ -821,6 +833,20 @@ these changes do not close the movement, camera, or actor parity gates.
 - Incomplete: there is no slide-in or slide-out animation. The safe-zone and
   screen-position offsets are taken as zero. The top band ignores riding hearts and
   pocket-profile rules.
+
+## Potion tooltips
+
+- Potion, splash and lingering potion stacks resolve their name from the
+  auxiliary value (`potion.<type>[.splash|.linger].name`), shared by the
+  inventory tooltip and the selected-item HUD. The tooltip lists each effect
+  with its potency and `m:ss` duration, blue when beneficial and red when
+  harmful. See docs/reference/potion-tooltips.md.
+- Incomplete: effect amplifiers and durations come from the Minecraft wiki's
+  Bedrock tables, not a native capture. Lingering durations are shown at a
+  quarter of the drinkable duration, which matches the cloud's applied duration
+  but is not confirmed as the native tooltip value. Base potions show no
+  `No Effects` line, tipped arrows keep their generic name, and attribute
+  modifier lines are not shown.
 
 ## Worn server-pack armour textures
 
@@ -1086,7 +1112,7 @@ these changes do not close the movement, camera, or actor parity gates.
   are skipped once two consecutive verdicts agree under the same eye, orientation,
   projection, viewport, depth size and geometry; any translation or turn (the near plane swings and can
   clip a near occluder), sub-chunk removal or replacement, cave or tint change voids them.
-  `RUST_MCBE_CPU_CULLING=1` turns it off.
+  `CINNABAR_CPU_CULLING=1` turns it off.
 - Offscreen tests: kernel bits match a CPU Hi-Z reference; replayed paths (flick, strafe past
   a pillar, wall edit, a turn that clips a wall just beyond the near plane) never skip a
   sub-chunk that shows pixels while a stale-verdict policy does; the walled scene stops
@@ -1141,7 +1167,7 @@ these changes do not close the movement, camera, or actor parity gates.
   against rendered ids, and the CPU path's pixels from a stale history.
 - Live visual pass: on Vulkan and DX12, GPU-culled and CPU-planned frames at the aeris.land
   spawn match at four headings apart from moving entities, nametags and chat. GPU pass times
-  come from `RUST_MCBE_GPU_NODES=1` (below).
+  come from `CINNABAR_GPU_NODES=1` (below).
 
 ## Render frame time
 
@@ -1168,7 +1194,7 @@ these changes do not close the movement, camera, or actor parity gates.
   On an RX 6600 XT the program switch between the two families cost more than the drawing. An
   offscreen GPU test matches the shared pipeline's pixels, for sorted refs and direct records,
   against both programs through their own pipelines.
-- `RUST_MCBE_GPU_NODES=1` plots per-node and per-section GPU times under Tracy, and Tracy
+- `CINNABAR_GPU_NODES=1` plots per-node and per-section GPU times under Tracy, and Tracy
   builds expose wgpu's encode and submit zones; see the live-testing guide.
 - Evidence: [render frame time](docs/evidence/render-frame-time.md), measured on DX12 before
   Windows defaulted to Vulkan; `WGPU_BACKEND=dx12` selects that backend.
@@ -2209,7 +2235,7 @@ and covered-vegetation parity remain incomplete. No visual or stability gate clo
 
 2026-10-02 macOS stability (in progress; no acceptance gate closed): repeated
 Apple M3 Pro/macOS 26.3 GPU events attribute firmware-detected lockups to
-`bedrock-client`; subsequent WindowServer watchdog panics and AGX-blocked
+`cinnabar`; subsequent WindowServer watchdog panics and AGX-blocked
 threads explain the whole-host freezes. Cinnabar's custom shader constructors
 now enable Bevy/wgpu runtime bounds and loop checks instead of the unchecked
 default. The shared biome shader bounds its data-driven loop by the existing
@@ -2882,10 +2908,9 @@ palettes now resolve exact current name/state identities; legacy state upgrades,
 default-state reconciliation and unknown-property handling remain incomplete. Block-entity id and
 block-actor-type checks are not emulated. StartGame custom blocks are known only
 when every custom name sorts after vanilla in sequential mode (Lifeboat's case);
-they collide as full cubes with stone's surface facts and render as diagnostic
-cubes until runtime pack application lands. Hashed-id sessions now register custom
-states by network hash (pack visuals via the runtime overlay; stone-surface collision
-provisional); sequential customs sorting among vanilla remap wire ids, custom collision
+they collide as full cubes and render as diagnostic cubes until runtime pack
+application lands. Hashed-id sessions now register custom states by network hash
+(pack visuals via the runtime overlay); sequential customs sorting among vanilla remap wire ids, custom collision
 uses `minecraft:collision_box`, and vanilla blocks retexture from a pack's terrain keys
 via the `.matkeys.json` sidecar (rebuild assets to emit it). Vanilla item icons override by
 short-name key (provisional). Custom-block selection boxes drive the pick ray. 2026-10-11 terrain
@@ -2908,7 +2933,7 @@ not per frame, and any animated layer samples with repeat wrap); actors are lit 
 light at their feet through the shared light curve with daylight fixed at 1 (the vanilla light
 texture, tint and sample point are unmatched), pack attachables (held/worn on player bodies) layer over the equipment runtime per session
 (pack bindings win by item identifier; pack property defaults seed only from `entities/` in
-resource packs), rigs depending on vanilla clips are attributed as fallbacks; pack precedence follows the Bedrock stack (last entry wins). No vanilla acceptance gate is closed by this change.
+resource packs), rigs depending on vanilla clips are attributed as fallbacks; server pack admission converts first-entry priority into low-to-high merge layers. No vanilla acceptance gate is closed by this change.
 
 2026-10-12 protocol codec: `protocol` decodes and encodes through protocolgen's generated
 contract crate (`bedrock-protocol-1-26-51`, contract 1), vendored byte for byte and pinned by
@@ -3589,7 +3614,7 @@ re-engaging the provisional settle gate, GamePad-frame validation (no physical g
 tolerance re-verification of scaled echoes, and authoritative retail-client measurement of the NSL
 echo contract.
 
-**Session record (2026-08-25, continuation).** Five reviewed tranches landed on `dev/ox-alpha`: `d0bb7ccc` derives every hotbar cell from one ledger-snapshot authority revision (VPA-123 deterministic slice); `b6d689eb` bumps PHASE3_VIOLATION to v2 with a ten-key identity payload for `non_monotonic_frame` so future one-off live occurrences are self-diagnosing; `57b59b06` lands the canonical container-address projection (VPA-122) after a recovered interrupted lane was completed and a review-caught silent narrowing of prior window-0 admissions was restored; `b3b14bc5` adds the bounded spawn-anchor depenetration probe with `SpawnSettleGate::EmbeddedHold` and exact surface-spawn feet (VPA-109 slice); `f9cbe242` adds opt-in (`RUST_MCBE_TELEPORT_ACK=1`) HandledTeleport acknowledgement wired through production reconciliation for correction snaps, teleported MovePlayers, and Respawns after its first review found the Respawn site unwired. Each has fresh independent review evidence in the tracking table, and the branch-adjudication startup obligation is discharged: 49 unintegrated local heads dispositioned as 30 superseded + 12 stale-historical + 7 backup + 1 genuine candidate (`agent/combat-phase5`, kept as reference only — it predates the protocolgen rewrite so it seeds a fresh reviewed tranche, never a direct merge) + 4 low-confidence entries requiring object inspection before any deletion. Live: the first authenticated current-binary LBSG session joined, streamed its full inline cohort, transmitted 44 physics packets, then reproduced the exact `"We've detected movement cheats"` rejection at 49.8 s after two 200-tick embedded-anchor fail-open lifts with a constant +1.00 X-block/tick inputless slide — the embedment mechanism is now confirmed live, the probe correctly refused to invent motion, and the next cure tranche is collision-truth adjudication instrumentation. The same session exposed and fixed a launcher stale-binary defect (machine-wide `CARGO_TARGET_DIR` redirecting the harness build while it executed a days-old project-local exe) and an auth-cache ACL quarantine that blocked all authenticated runs until the operator cache was restored under its required protected DACL. BDS/LBSG tolerance of scaled NSL echoes remains unreverified because this session ended in a movement rejection before echo behavior could be decisive.
+**Session record (2026-08-25, continuation).** Five reviewed tranches landed on `dev/ox-alpha`: `d0bb7ccc` derives every hotbar cell from one ledger-snapshot authority revision (VPA-123 deterministic slice); `b6d689eb` bumps PHASE3_VIOLATION to v2 with a ten-key identity payload for `non_monotonic_frame` so future one-off live occurrences are self-diagnosing; `57b59b06` lands the canonical container-address projection (VPA-122) after a recovered interrupted lane was completed and a review-caught silent narrowing of prior window-0 admissions was restored; `b3b14bc5` adds the bounded spawn-anchor depenetration probe with `SpawnSettleGate::EmbeddedHold` and exact surface-spawn feet (VPA-109 slice); `f9cbe242` adds opt-in (`CINNABAR_TELEPORT_ACK=1`) HandledTeleport acknowledgement wired through production reconciliation for correction snaps, teleported MovePlayers, and Respawns after its first review found the Respawn site unwired. Each has fresh independent review evidence in the tracking table, and the branch-adjudication startup obligation is discharged: 49 unintegrated local heads dispositioned as 30 superseded + 12 stale-historical + 7 backup + 1 genuine candidate (`agent/combat-phase5`, kept as reference only — it predates the protocolgen rewrite so it seeds a fresh reviewed tranche, never a direct merge) + 4 low-confidence entries requiring object inspection before any deletion. Live: the first authenticated current-binary LBSG session joined, streamed its full inline cohort, transmitted 44 physics packets, then reproduced the exact `"We've detected movement cheats"` rejection at 49.8 s after two 200-tick embedded-anchor fail-open lifts with a constant +1.00 X-block/tick inputless slide — the embedment mechanism is now confirmed live, the probe correctly refused to invent motion, and the next cure tranche is collision-truth adjudication instrumentation. The same session exposed and fixed a launcher stale-binary defect (machine-wide `CARGO_TARGET_DIR` redirecting the harness build while it executed a days-old project-local exe) and an auth-cache ACL quarantine that blocked all authenticated runs until the operator cache was restored under its required protected DACL. BDS/LBSG tolerance of scaled NSL echoes remains unreverified because this session ended in a movement rejection before echo behavior could be decisive.
 
 **Repository-wide parity audit follow-up (2026-08-20):**
 
@@ -4026,7 +4051,7 @@ Scope (detailed plan to be written at phase start):
 
 - [x] Add an explicit, ignored Microsoft token cache and optional authenticated upstream
   dial mode while preserving the offline BDS path when `-auth-cache` is omitted.
-- [x] Document the exact `bedrock-core` and release `bedrock-client` commands, device-code
+- [x] Document the exact `bedrock-core` and release `cinnabar` commands, device-code
   stdout flow, cache privacy requirements, and Rust → local socket → Go → RakNet boundary.
 - [x] Report the core's startup lifecycle synchronously: Go build start, process/auth state,
   published local endpoint, local Rust-client acceptance, and upstream connect/success/failure.
@@ -4355,7 +4380,9 @@ Scope: block registry + block-state → model/texture mapping (generated export 
       states compile through compact six-quad alpha-cutout cuboids with exact
       typed open/orientation/hinge/half selection, 3/16-block thickness,
       lower/upper door materials, conservative partial-model culling, and
-      deterministic template reuse. Legacy oak-through-iron door texture arrays
+      deterministic template reuse. Trapdoor templates also retain facing/top-half
+      artwork orientation and the top three sprite rows on thin edges, including
+      the opened north/south cap texture override. Legacy oak-through-iron door texture arrays
       and modern bamboo/cherry/mangrove/pale-oak/nether/copper/waxed aliases are
       covered. Dragonfly's rotated door-state encoding is inverted before its
       logical-facing/open-hinge transform; an independent review caught and
@@ -4369,7 +4396,9 @@ Scope: block registry + block-state → model/texture mapping (generated export 
     - [ ] Barrel and adjacent trapdoor render parity: barrel facing/open artwork,
       grain direction, material ownership and carried-item rendering have regression
       and rendered coverage. The reported texture leakage was not reproduced;
-      standalone trapdoor edge UV parity remains unverified.
+      trapdoor edge UV and state orientation have compiler regressions across
+      registered materials and 16/32 pixel textures. Rendered trapdoor acceptance
+      and broader graphics parity remain incomplete.
     - [x] Connected wall templates: all 5,184 states across 32 wall materials
       decode the exact 9-bit north/east/south/west none/short/tall selector and
       center-post bit into deterministic zero-to-30-quad packed models. Visible
@@ -4759,7 +4788,7 @@ Scope: block registry + block-state → model/texture mapping (generated export 
       generation-coherence, Direct/MDI-parity, and bound tests are present. This
       checkpoint changes no culling, meshing, shader, draw-order, or presentation
       behavior and does not establish a visibility fix. A fresh affected live
-      run must still capture consecutive `RUST_MCBE_VISIBILITY_SNAPSHOT`
+      run must still capture consecutive `CINNABAR_VISIBILITY_SNAPSHOT`
       markers spanning the symptom and identify the first nonzero adjacent loss
       before any repair is proposed.
       **Live diagnostic-geometry attribution (2026-07-16):** every actually
@@ -5431,7 +5460,7 @@ store it only under the user's temporary directory, inspect that file, and never
     visibility-churn, and skipped-frame regressions are green along with all 157
     render tests, 289 client unit tests (two ignored), strict Clippy, formatting,
     and diff checks. Live DX12/FIFO run `20260716T003124Z-7592` advanced through
-    `RUST_MCBE_TELEPORT_SETTLED` with a complete 6,951-allocation manifest and a
+    `CINNABAR_TELEPORT_SETTLED` with a complete 6,951-allocation manifest and a
     stable 1,676-allocation visible/drawn subset, with every contamination
     counter zero. The binding far teleport still took 48,128 ms and the forced
     full-view remesh did not finish inside the 60-second timed session; peak
@@ -5613,7 +5642,7 @@ tick states; correction/rewind handling (`CorrectPlayerMovePrediction`).
   then landed as merge `a9593e7`.
   - Post-integration deterministic verification on the merged tree passed:
     `cargo test -p semantic-input --locked` (53 passed);
-    `cargo test -p bedrock-client --locked` (lib 420, assets 41, hud_assets 9,
+    `cargo test -p cinnabar --locked` (lib 420, assets 41, hud_assets 9,
     inventory_router 3, physics_assets 2, doctest 1; all passed);
     `cargo test -p protocol --locked` (21 test binaries, all passed);
     `cargo test -p client-world --locked` (lib 236 passed / 1 ignored,
@@ -5622,7 +5651,7 @@ tick states; correction/rewind handling (`CorrectPlayerMovePrediction`).
     `git diff --check` passed;
     `cargo clippy --workspace --all-targets --locked -- -D warnings` passed with zero
     warnings and is CI's exact Clippy command; and
-    `Invoke-Pester -Script 'scripts/tests/acceptance/Phase3.Tests.ps1' -PassThru` passed
+    `Invoke-Pester -Script 'scripts/tests/acceptance/MovementEvidence.Tests.ps1' -PassThru` passed
     89/89.
   - `cargo test --workspace --locked` was not run locally as a single invocation. The
     per-crate suites above were run instead; CI runs the workspace form.
@@ -5638,7 +5667,7 @@ tick states; correction/rewind handling (`CorrectPlayerMovePrediction`).
     witnesses, while its manifest and final evidence name Touch as `Deferred`, attribute the
     deferral to the owner decision, and leave touch parity open rather than treating it as
     observed or satisfied.
-  - `Phase3Launcher.ps1` now supports authenticated `Zeno` runs at
+  - `MovementLauncher.ps1` now supports authenticated `Zeno` runs at
     `zenomc.org:19197`, following the same candidate/free-camera scenario and five-minute
     minimum used by the other external targets. Zeno is the low-population official-BDS
     server-authority target for movement rejection and correction checks.
@@ -5678,7 +5707,7 @@ tick states; correction/rewind handling (`CorrectPlayerMovePrediction`).
     (`stream/retries.rs:247-255`) while the column is still added to `loaded_columns`
     (`retries.rs:39-47`), so cohort completeness can be misleading. Consequently
     `mutation_coordinate` remains `null` (`app-metrics.json:7`);
-    `RUST_MCBE_WORLD_READY` never fires (`app/src/acceptance/mutation.rs:270-272`), the
+    `CINNABAR_WORLD_READY` never fires (`app/src/acceptance/mutation.rs:270-272`), the
     60-second acceptance clock never arms, and runs hang until the launcher's 180-second bound.
     **No `phase3-final.json` has ever been produced; there is no Phase 3 acceptance verdict of
     any kind.**
@@ -5778,7 +5807,7 @@ tick states; correction/rewind handling (`CorrectPlayerMovePrediction`).
   The final local head is not yet pushed or integrated.
   - Normal production sessions again install `PhysicsAuthorityGate::ProductionDisabled`.
     `CandidatePhysics` and authenticated `FastTransferWitness` are the only attributable
-    harness lanes that add `--phase3-candidate-physics`; `FreeCameraSilence` remains
+    harness lanes that add `--movement-candidate-physics`; `FreeCameraSilence` remains
     candidate-free and adds only `--auto-fly`. Dry-run and final evidence both report
     `production_physics_default_enabled=false`.
   - The first pushed-head CI run exposed ten architecture-size violations. Coherent private
@@ -5793,7 +5822,7 @@ tick states; correction/rewind handling (`CorrectPlayerMovePrediction`).
     launcher timeout, no watchdog firing, and an ordered `SHUTDOWN_WATCHDOG_ARMED` then
     `SHUTDOWN_COMPLETED` tail.
   - The final safety integration passes formatting, the architecture checker, all 496
-    bedrock-client tests, strict bedrock-client Clippy, and all 106 Phase 3/FastTransfer
+    cinnabar tests, strict cinnabar Clippy, and all 106 Phase 3/FastTransfer
     Pester contracts. The preceding integrated head passed all 2,487 workspace tests and
     strict workspace Clippy. Linux acceptance remains delegated to CI.
   - This is one BDS FreeCamera smoke, not CandidatePhysics, external-server, native-parity,
@@ -6418,6 +6447,10 @@ dragonfly's generation and mob AI parity gaps are accepted, not chased.
 
 Status: provisional (see `docs/local-worlds.md`): BDS 1.26.52.3 (native, or the manifest-pinned container on macOS) for default worlds, dragonfly for Flat worlds; menu create/edit/delete/templates and staged loading are built. Live-verified on macOS through the core's control channel (create, staged open, spawn, server-side teleport and client fall, pause, close with no orphan); the menu click-through and on-screen input were not exercised (locked screen), and the create screen lacks vanilla's Multiplayer, Cheats and pack tabs, so no acceptance gate is closed.
 
+Local-world edits save before Play and on Back or Escape. Save errors preserve the form for retry.
+Dragonfly restores the local host with the selected mode, and native and container BDS launches
+apply the selected mode to existing worlds. The local-world parity gate remains provisional.
+
 ## Phase 8 — Audio, polish, packaging
 
 **Rain ambience:** completed weather ticks now admit overlapping finite rain
@@ -6743,9 +6776,9 @@ most inbound correction velocity/ground fields, and some motion events. The firs
 burst's floor-contact discrepancy and the last burst's exact replay failure need a
 fresh capture. Future/missing correction-frame behavior remains unverified; existing fallback snaps, collision identity policy and teleport
 expiry remain provisional. The simulator still uses its existing f64 arithmetic.
-No live server connection was made. Use RUST_MCBE_MOVEMENT_TRACE=1 for outbound PAI
+No live server connection was made. Use CINNABAR_MOVEMENT_TRACE=1 for outbound PAI
 and the new unthrottled inbound movement and latency-fence records. Normal MovePlayer acknowledgement
-no longer needs RUST_MCBE_TELEPORT_ACK; that opt-in still enables unverified extra routes.
+no longer needs CINNABAR_TELEPORT_ACK; that opt-in still enables unverified extra routes.
 
 ## Cinnabar extension: server experiences (incomplete; not vanilla parity)
 
@@ -6795,7 +6828,7 @@ no longer needs RUST_MCBE_TELEPORT_ACK; that opt-in still enables unverified ext
   - `cargo test -p server-experience -p mod-host --locked` (31 and 13 tests)
   - `cargo test -p server-experience -p mod-host --features server-experience/developer-media --locked`
     (34 and 13 tests)
-  - `cargo test -p bedrock-client --locked` (unit, integration and documentation tests)
+  - `cargo test -p cinnabar --locked` (unit, integration and documentation tests)
   - `cargo clippy --workspace --all-targets --features server-experience/developer-media --locked -- -D warnings`
   - `cargo run -p architecture --locked -- check --root . --policy tools/architecture/policy.toml`
 - `cargo fmt --all`, the formatting check and `git diff --check` passed. Production
@@ -6817,7 +6850,7 @@ no longer needs RUST_MCBE_TELEPORT_ACK; that opt-in still enables unverified ext
   recorded validation and existing lockfile additions.
 - Local checks passed through the owner's `cslot` limiter:
   - `cargo check --workspace --all-targets --locked`
-  - `cargo test -p server-experience -p bedrock-client --locked` (35 server-experience
+  - `cargo test -p server-experience -p cinnabar --locked` (35 server-experience
     tests; 1,879 client unit tests passed and 16 were ignored; client integration
     and documentation tests passed)
   - `cargo test -p server-experience --features developer-media --locked` (38 tests)
@@ -7480,6 +7513,16 @@ durations and mapping source coordinates into resized atlas placements.
 Incomplete: exhaustive authored effect variants, matched live game-mode sequencing
 and hardware frame budgets remain open.
 
+Chat trigger filters now survive built-in layout restoration when a pack attaches
+its visibility binding inside a derived HUD row or the open chat history label.
+Pack variables resolve before the binding transfers, and effect factories retain
+the full message stream. Private-use bitmap icons preserve their sheet colors and
+text opacity; missing icons retain the normal replacement glyph tint.
+Incomplete: several active derived labels with different `#visible` filters are
+flattened onto the one built-in label, so the last filter wins instead of their union.
+Full native pixel matching, supplementary-plane emoji routing and hardware frame
+budgets also remain open. These changes do not close general chat parity.
+
 Live follow-up confirms custom sound playback. The latest user test reports the
 earlier actor, HUD, collision and inventory bugs fixed, including the actual
 Galaxite death animation. Matched native pixel comparisons remain separate.
@@ -7829,6 +7872,12 @@ acquire dye from a material name. The existing undyed colour and legacy armour m
 are retained. Complete native shader coverage and session item-component dye overrides remain
 open; this descriptor change does not close those parity gates.
 
+### Compiled ambient material facts
+
+The world carrier retains solid/liquid material dispositions for every state. Ambient leaf sampling reads these facts without identifier lookup or geometry inference. The partial plant catalog is joined to pinned state identities; unknown states and custom overlays remain unresolved. Air admission is explicitly provisional.
+
+Incomplete: the complete native material/state inventory, air binding, liquid and solid classifications, legacy protocols and server material component overlays remain unverified. This partial catalog does not close the material parity gate.
+
 ### Block-family routing coverage
 
 Crossed-plane routing now comes from the shared family catalog and is retained
@@ -7890,7 +7939,7 @@ replacements. Unknown mounts no longer inherit horse equipment cells in JSON-UI,
 fallback drawing, pointer handling and quick-move routing. Active equippable
 components, accepted items, conditional activation, advertised custom bases and
 later mount layouts remain incomplete and do not close the entity parity gate.
-Entity carrier 21 requires a `make assets` rebuild.
+Entity carrier 23 requires a `make assets` rebuild.
 
 ### Compiled furnace fuel admission (incomplete)
 
@@ -7914,11 +7963,16 @@ regenerates the carrier and stale envelopes fail admission. Held-item tool and
 creative-break classification still use item names and need separate admission
 facts before the complete mining path can be considered name-free.
 
-Movement descriptor coverage remains incomplete. The current physics carrier requires a typed
-movement disposition for every admitted state. Existing declared special rules retain their
-numerical behavior; unclassified states remain unresolved and keep the previous conservative
-numerical defaults. No ordinary movement classification is inferred from absence of a special
-rule. Complete native ordinary/special coverage, custom session movement components and
+Movement descriptor coverage remains incomplete. The physics carrier records a reviewed
+ordinary, special or unresolved disposition for every admitted state. The movement census in
+the registry policy is bound to the digest of the identifier set it reviewed, so a new
+identifier fails generation until it is classified. Doors, trapdoors and fence gates (one-way
+collision while overlapping), shulker boxes and moving blocks (block-actor collision) are
+special but unmodeled and keep ordinary numbers; soul soil stays unresolved. Climbable and
+liquid membership follows the declared rules and is not independently established. Custom
+blocks take surface friction from their base or last matching permutation's
+`minecraft:friction` value (one minus the value, default 0.6) with neutral speed and fluid
+facts, independent of any vanilla carrier record. The unmodeled and unresolved behaviour and
 all provisional rule values still require verification before this gate can close.
 Rig placement and target-rotation frames are compiled and carried with the selected
 rig. Their compatibility source preserves existing absolute-frame routes, while
@@ -7958,6 +8012,16 @@ the generic-mob disposition remains provisional and does not close a parity gate
 
 Compiled seat descriptors are incomplete. Every independently collected entity has a seat admission, including unresolved definitions. Authored base layouts, bounded rider counts, literal rotations and Molang rotation references are compiled before runtime; component-group names no longer select layouts. Actual group activation and rotation-expression evaluation remain unresolved, so those layouts retain streamed poses. Passenger ordering, mutable rideable components, session behavior overlays and complete native layout coverage remain open. Static count selection preserves the existing compatibility order and is provisional.
 
+### Compiled intrinsic shine (incomplete)
+
+Intrinsic shine admission remains incomplete. The versioned item descriptor retains the existing
+four admitted positive choices as provisional compatibility data and gives each independently
+admitted retail identity an explicit disposition. Written books are absent from this inventory
+and remain unresolved until their admission is independently established. Unsupported identities remain unresolved. Full native class,
+metadata and component-version coverage remains open; compiler facts alone do not close these
+parity gates. Numeric session admission and shared world/UI consumers are implemented; their
+focused tests pass. Full visible rendering, metadata and native coverage verification remain open.
+
 ## Held-item grip admission (incomplete parity)
 
 Item grip facts are compiled into entity carrier 21, checked against the separate
@@ -7975,9 +8039,83 @@ item names do not select bow or crossbow use frames. Unsupported charged project
 has no admitted drawing frame. Complete native item/stack metadata coverage and stack-NBT
 cache acceptance remain incomplete. Authored and session use cooldown fractions share the
 provisional component-precision conversion; native cooldown initialization is unverified.
+## Controller particle attachments
+
+Controller effects retain typed locator references and compiled initialization
+programs. Locator attachments follow the sampled actor placement and inherited
+skeleton; initialization reads the emitter's variables and, for bound effects, the actor's
+numeric query context before any particle is emitted. Bound effects retire with their
+actor lifetime. Temporary zero scale retains attachments and pending state entries
+retry placement when scale returns. Particle spawning and attachment updates share
+one lazy pose sample per actor per frame. The annotation coverage guard reads the
+pinned controller files.
+
+Incomplete parity: function-style actor queries outside the particle expression
+grammar, skin-authored locators, bound child-event offsets under rotation, fallback
+placement without a rig, and the full animated locator gallery remain unverified.
+Frame and streaming performance acceptance remains open. No parity gate closes.
+
+### Particle depth ranges
+
+Translucent particles enter the shared terrain phase at individual camera depths from the
+current extracted frame. Adjacent contiguous instances of the same material combine after
+phase preparation, while intervening terrain preserves the range boundaries. Cutout particles
+keep their depth-writing pass. The expression of depth matches the view sorting direction.
+
+An offline fixture verifies alpha and additive depth composition through the production shader
+and measures the GPU pass cost. Exact native composition across material buckets and full-frame
+performance acceptance remain incomplete.
+
+## Cached beacon beam sections
+
+Beacon columns invalidate typed color sections when blocks, NBT, dimension bounds or block assets change. Admitted beacons populate the cache lazily after distance and submission checks. Top-layer beacons extend to open sky without sampling blocks. A block-owned eligibility table recognizes glass and hardened glass; sections carry their height and mixed tint to the renderer.
+
+Incomplete parity: the full beacon geometry, animation, visibility and GPU performance gallery remains open.
+
+## Compiled beacon tint eligibility
+
+The block registry carries a tint or an explicit non-tinting disposition for each
+canonical state. Hardened stained glass and panes use the same palette colours
+as ordinary stained glass. Frame submission reads numeric descriptors, and
+unrecognised custom identities remain unresolved. Stale active registries require
+`make assets`.
+
+Incomplete: this descriptor does not establish beam sections, obstruction,
+activation, world height, custom block material overlays or end-to-end colour
+transfer. These remain separate acceptance gates.
+
+## Active block-entity artwork
+
+The resource-pack transaction now builds the block-entity atlas on its worker and publishes it with the accepted pack result on join and reload. Missing or invalid overrides retain the validated startup tile. Texture and UV publication advance together.
+
+Incomplete parity: full pack-reload galleries and streaming frame budgets remain open.
 
 ## Loom banner previews
 
 JSON-UI banner controls draw ordered front-cloth layers from the active artwork. Loom pattern choices and results publish bounded pattern and dye bindings, including existing banner layers.
 
 Incomplete parity: recipe eligibility and exact pattern-choice styling remain open.
+
+## Entity terrain occlusion and retained block-entity view culling
+
+- Actor bodies and their shadow bounds use bounded, current-terrain exposed-face proofs after
+  ordinary view admission. Name tags retain their independent publication. Unknown,
+  dirty, unpublished, clipped, transparent or budget-exhausted terrain always draws.
+  Internal voxel faces cannot certify depth. Near-clip safety is independent of rotation.
+  Actors with unbounded attachments, extra layers or no authored bounds also draw.
+  Controllers with any replacement geometry bypass base-model terrain proofs, including
+  selections between ticks; controllers that always draw the base model remain eligible.
+- Block entities use the same proof without stopping lids, rings, map requests or text
+  canvases. Global beams bypass terrain proofs. Retained vertex runs are culled at draw
+  submission, so camera turns do not rebuild or upload cached meshes.
+- Each kind has a fixed plane/cell probe budget. Preparation counters record candidates,
+  hidden-by-occlusion and submitted; draw counters record skipped/submitted vertices.
+- Performance and rendered-frame acceptance remain incomplete until comparable captures
+  verify walls, gaps, rapid motion, shadows, name tags and unchanged animation state.
+
+Server pack priority: admission now converts highest-priority-first server handoffs
+into the low-to-high layer order used by resource reads and merge subscribers.
+Regression coverage checks overlapping files and glyph sheets, missing-file fallback,
+and original rejection indexes. Version-matched vanilla captures remain incomplete;
+this change does not close a parity gate. Locale font fallback and built-in named
+font alias behavior remain unchanged and need independent verification.
