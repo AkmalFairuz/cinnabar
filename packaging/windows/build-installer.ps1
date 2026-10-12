@@ -6,7 +6,7 @@ param([string]$Out = ".local/dist/windows-release", [string]$Binaries = "",
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path -LiteralPath $Root).Path
 $release = if ($Binaries) { (Resolve-Path -LiteralPath $Binaries).Path } else { Join-Path $root "target/release" }
-foreach ($name in "bedrock-client.exe", "bedrock-core.exe", "bedrock-local-server.exe", "assetc.exe") {
+foreach ($name in "cinnabar.exe", "bedrock-core.exe", "bedrock-local-server.exe", "assetc.exe") {
     if (-not (Test-Path (Join-Path $release $name))) { throw "missing $release\$name; run make package-binaries" }
 }
 $manifest = Get-Content -LiteralPath (Join-Path $root "Cargo.toml") -Raw
@@ -24,7 +24,7 @@ Remove-Item -LiteralPath $payload -Recurse -Force -ErrorAction SilentlyContinue
 $resources = Join-Path $payload "resources"
 $kit = Join-Path $resources "prep-kit"
 New-Item -ItemType Directory -Force (Join-Path $resources "assets"), (Join-Path $resources "licenses"), (Join-Path $resources "fonts"), (Join-Path $kit "bin"), (Join-Path $kit "assets"), (Join-Path $kit "assets/fonts"), (Join-Path $kit "data") | Out-Null
-Copy-Item (Join-Path $release "bedrock-client.exe"), (Join-Path $release "bedrock-core.exe"), (Join-Path $release "bedrock-local-server.exe") $payload
+Copy-Item (Join-Path $release "cinnabar.exe"), (Join-Path $release "bedrock-core.exe"), (Join-Path $release "bedrock-local-server.exe") $payload
 Copy-Item (Join-Path $release "assetc.exe") (Join-Path $kit "bin")
 Copy-Item (Join-Path $root "crates/assets/data/block-physics-v2193.bin") (Join-Path $resources "assets")
 Copy-Item (Join-Path $root "THIRD_PARTY_NOTICES.md") (Join-Path $resources "assets")
@@ -49,9 +49,9 @@ if ($LASTEXITCODE -ne 0) { throw "icon rendering failed" }
 $logo = Join-Path $outPath "cinnabar.png"
 magick -background none (Join-Path $PSScriptRoot "../icons/cinnabar.svg") -resize 64x64 $logo
 if ($LASTEXITCODE -ne 0) { throw "logo rendering failed" }
-& (Join-Path $PSScriptRoot "set-executable-icon.ps1") -Executable (Join-Path $payload "bedrock-client.exe") -Icon $icon
+& (Join-Path $PSScriptRoot "set-executable-icon.ps1") -Executable (Join-Path $payload "cinnabar.exe") -Icon $icon
 
-& (Join-Path $PSScriptRoot "sign.ps1") -Path (Join-Path $payload "bedrock-client.exe"), (Join-Path $payload "bedrock-core.exe"), (Join-Path $payload "bedrock-local-server.exe"), (Join-Path $kit "bin/assetc.exe")
+& (Join-Path $PSScriptRoot "sign.ps1") -Path (Join-Path $payload "cinnabar.exe"), (Join-Path $payload "bedrock-core.exe"), (Join-Path $payload "bedrock-local-server.exe"), (Join-Path $kit "bin/assetc.exe")
 $msi = Join-Path $outPath "Cinnabar-$version-x64.msi"
 wix build -arch x64 -d Version=$version -d Payload=$payload -d Icon=$icon -o $msi (Join-Path $PSScriptRoot "cinnabar.wxs")
 if ($LASTEXITCODE -ne 0) { throw "wix build failed" }
