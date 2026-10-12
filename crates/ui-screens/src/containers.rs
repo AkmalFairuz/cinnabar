@@ -154,6 +154,31 @@ impl ContainerScreen {
         input: ContainerInput<'_>,
         frame: &mut PaintFrame<'_>,
     ) -> Option<EngineFrame> {
+        self.render(engine, source, items, input, frame, false)
+    }
+
+    /// Prepares layout and textures without retaining bindings or painting the closed screen.
+    pub fn prepare(
+        &mut self,
+        engine: &FormEngine,
+        source: &dyn ContainerSource,
+        items: &ContainerFrame<'_>,
+        input: ContainerInput<'_>,
+        frame: &mut PaintFrame<'_>,
+    ) {
+        let _ = self.render(engine, source, items, input, frame, true);
+    }
+
+    /// Shares container data and layout preparation between prewarming and visible painting.
+    fn render(
+        &mut self,
+        engine: &FormEngine,
+        source: &dyn ContainerSource,
+        items: &ContainerFrame<'_>,
+        input: ContainerInput<'_>,
+        frame: &mut PaintFrame<'_>,
+        prepare: bool,
+    ) -> Option<EngineFrame> {
         let ContainerInput {
             layout,
             title,
@@ -255,11 +280,23 @@ impl ContainerScreen {
                 renderers.push(&mut **renderer);
             }
             let mut paint_frame = frame.with_renderers(&mut renderers);
-            engine.draw(art, &mut paint_frame, |env, root| {
+            let draw = |env: &json_ui::LayoutEnv<'_>, root| {
                 ScreenCache::render(
                     cache, catalog, server_ui, reference, &context, &data, &view, root, env, text,
                 )
-            })
+            };
+            if prepare {
+                let _ = engine.prepare(art, &mut paint_frame, draw);
+                if let Some(cached) = cache {
+                    // Closed-screen data is incomplete. The first paint binds from fresh state,
+                    // even if its data happens to match the prepared layout's inputs.
+                    cached.binding = recipe_book::screen_binding(server_ui);
+                    cached.data = None;
+                }
+                Ok(None)
+            } else {
+                engine.draw(art, &mut paint_frame, draw)
+            }
         };
         frame.renderers = caller;
         if resolved(cache) != before {
@@ -297,8 +334,8 @@ impl ContainerScreen {
         self.resolves
     }
 
-    /// Whether the personal inventory should be painted ahead of its first open: true once for
-    /// each catalog `engine` draws with, after which the inventory's own cache keeps it warm.
+    /// Whether the personal inventory needs preparation for this catalog. An inventory already
+    /// painted retains its live bindings and needs no prewarm when it closes.
     pub fn prewarm_inventory(&mut self, engine: &FormEngine) -> bool {
         let catalog = engine.catalog();
         if self
@@ -309,7 +346,10 @@ impl ContainerScreen {
             return false;
         }
         self.prewarmed = Some(Arc::clone(catalog));
-        true
+        !self
+            .inventory
+            .as_ref()
+            .is_some_and(|cached| Arc::ptr_eq(&cached.catalog, catalog))
     }
 }
 

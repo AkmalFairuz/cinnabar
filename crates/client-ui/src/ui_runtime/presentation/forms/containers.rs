@@ -271,7 +271,7 @@ impl UiPresentationRuntime {
             return Ok(false);
         };
         let size = [width, height];
-        match self.paint_container(
+        match self.render_container(
             player_runtime,
             runtime,
             layout,
@@ -280,6 +280,7 @@ impl UiPresentationRuntime {
             next,
             metrics,
             size,
+            false,
         ) {
             Some(frame) => {
                 self.projections.container = Some((frame, layout));
@@ -293,9 +294,8 @@ impl UiPresentationRuntime {
         }
     }
 
-    /// Paints the personal inventory once while it is closed, into nodes that are thrown away, so
-    /// its first open reuses the screen the engine already resolved, bound and laid out instead
-    /// of building it in the frame the player opens it.
+    /// Prepares the closed inventory's resolution, layout and textures without painting it or
+    /// applying live bindings before the first open.
     pub(in crate::ui_runtime::presentation) fn prewarm_engine_inventory(
         &mut self,
         player_runtime: &player_state::PlayerState,
@@ -317,8 +317,7 @@ impl UiPresentationRuntime {
         // The scene policy reads the open screen's flags from the engine's own resolved roots.
         renderer.scene_settings(layout.screen().0, renderer.context());
         let (mut nodes, mut next) = (Vec::new(), 0);
-        let preview = self.player_preview_view;
-        self.paint_container(
+        let _ = self.render_container(
             player_runtime,
             runtime,
             layout,
@@ -327,13 +326,13 @@ impl UiPresentationRuntime {
             &mut next,
             metrics,
             size,
+            true,
         );
-        self.player_preview_view = preview;
     }
 
-    /// Paints `layout` through the engine; `None` when the engine cannot draw it.
+    /// Prepares or paints `layout`; only a visible paint publishes frame geometry.
     #[allow(clippy::too_many_arguments)]
-    fn paint_container(
+    fn render_container(
         &mut self,
         player_runtime: &player_state::PlayerState,
         runtime: &UiRuntime,
@@ -343,6 +342,7 @@ impl UiPresentationRuntime {
         next: &mut u32,
         metrics: TextMetrics,
         [width, height]: [f32; 2],
+        prepare: bool,
     ) -> Option<EngineFrame> {
         let window_text = &self.hud_frame.window_text;
         let renderer = self.engine.as_deref()?;
@@ -393,21 +393,25 @@ impl UiPresentationRuntime {
             next,
             renderers: &mut renderers,
         };
-        let drawn = self.screens.containers.paint(
-            renderer,
-            &source,
-            &items,
-            ContainerInput {
-                layout,
-                title: &title,
-                previous,
-                pointer: runtime.inventory_pointer_gui(),
-                tooltip: tooltip.as_deref(),
-                clocks: &self.scene_clock,
-                id_aux: &id_aux,
-            },
-            &mut paint_frame,
-        );
+        let input = ContainerInput {
+            layout,
+            title: &title,
+            previous,
+            pointer: runtime.inventory_pointer_gui(),
+            tooltip: tooltip.as_deref(),
+            clocks: &self.scene_clock,
+            id_aux: &id_aux,
+        };
+        let drawn = if prepare {
+            self.screens
+                .containers
+                .prepare(renderer, &source, &items, input, &mut paint_frame);
+            None
+        } else {
+            self.screens
+                .containers
+                .paint(renderer, &source, &items, input, &mut paint_frame)
+        };
         if let Some(view) = preview_view.get() {
             self.player_preview_view = view;
         }
