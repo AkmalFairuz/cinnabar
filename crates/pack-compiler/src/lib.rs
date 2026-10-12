@@ -25,6 +25,7 @@ mod icon;
 mod image;
 mod lang;
 mod lightning_rod;
+mod oreui_icons;
 mod pack;
 mod particle;
 mod respawn_anchor;
@@ -35,7 +36,8 @@ pub use pack::{apply_atlas_tint, parse_atlas_tint};
 
 pub use actor::{
     ActorCompileReport, ActorFallback, ActorPackCompilation, ActorTextureEvidence,
-    CompiledActorCarrier, compile_actor_assets, compile_actor_pack, compile_actor_pack_unless,
+    CompiledActorCarrier, compile_actor_assets, compile_actor_assets_for_assets,
+    compile_actor_pack, compile_actor_pack_unless,
 };
 pub use animation::AnimationInventory;
 
@@ -89,6 +91,7 @@ pub use lang::{
     CompiledLangCarrier, LangCompileError, LangCompileReport, compile_lang_assets,
     compile_language, vanilla_language_codes,
 };
+pub use oreui_icons::compile_oreui_icons_to_file;
 pub use pack::{
     BlockTextureMap, DEFAULT_BLEND_FRAMES, FlipbookSource, MAX_FLIPBOOK_FRAMES, MAX_FLIPBOOKS,
     PackSources, TerrainTextureMap, TextureKey, read_pack, resolve_texture_key,

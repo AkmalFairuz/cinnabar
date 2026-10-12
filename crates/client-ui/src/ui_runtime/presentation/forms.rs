@@ -1,41 +1,27 @@
 //! Server-form presentation: the vanilla JSON-UI templates through the engine
 //! when the UI carrier is loaded, else the programmatic fallback dialog.
-pub mod book_screen;
-pub mod chat_coordinates;
-mod chat_link_dialog;
-mod chat_links;
-mod chat_position;
+#[cfg(test)]
+mod chat_links_tests;
+#[cfg(test)]
+mod chat_position_tests;
 pub mod chat_screen;
-pub mod container_data;
-pub mod container_kinds;
-mod death_screen;
-mod debug_overlay;
-mod disconnect_retry;
-pub mod discord_presence_setting;
-pub mod furnace_book;
-pub(super) use container_kinds::supported_storage_slots;
 pub mod containers;
-pub(super) mod credits_content;
-mod credits_renderer;
 pub mod credits_screen;
-pub mod crosshair_settings;
+mod debug_overlay;
+#[cfg(test)]
+mod disconnect_retry_tests;
 pub mod emote_screen;
 #[cfg(test)]
 mod engine_tests;
-pub mod experience;
-pub mod experience_modal;
 pub mod fallback;
 #[cfg(test)]
 mod formatting_tests;
-pub mod global_resources;
+pub mod furnace_book;
+#[cfg(test)]
+mod global_resources_tests;
 pub mod hud;
-pub mod hud_renderers;
 #[cfg(test)]
 pub mod inbox_tests;
-mod invite_screen;
-mod item_renderer;
-pub mod java_animations_setting;
-pub mod join_progress;
 #[cfg(test)]
 mod join_request_tests;
 pub mod loading_screen;
@@ -44,26 +30,18 @@ pub mod loading_texture_tests;
 pub(super) mod menu_caret;
 #[cfg(test)]
 pub mod menu_latency;
-mod menu_renderers;
-pub mod menu_screens;
 mod menu_title;
 pub mod menus;
-mod mod_crosshair;
-pub mod mod_hud;
-pub mod mod_hud_editor;
-pub mod mod_panel;
-pub mod mod_screens;
-pub mod mod_widgets;
+mod mod_surfaces;
 pub mod model;
-pub mod motion_blur_setting;
 pub mod npc;
-pub mod oreui;
 mod oreui_runtime;
+#[cfg(test)]
+mod oreui_tests;
+mod preview_renderer;
 #[cfg(test)]
 mod retained_image_tests;
 mod retained_menu;
-mod skybox_setting;
-pub mod smaa_setting;
 pub(super) use retained_menu::RetainedMenu;
 #[cfg(test)]
 pub(crate) mod compatibility_tests;
@@ -76,63 +54,38 @@ mod publication_tests;
 #[cfg(test)]
 pub mod regression_snapshots;
 
+#[cfg(test)]
 mod accounts;
-pub mod always_sprint_setting;
-pub mod enhanced_setting;
-pub mod graphics_expander;
 #[cfg(test)]
 pub mod play_flow_snapshots;
-pub mod play_screen;
 mod player_list;
 pub mod recipe_book;
 pub mod scene_policy;
 mod screen_registry;
 pub mod server_pack;
-pub mod settings_account;
-pub mod settings_chat;
-pub mod settings_controls;
-pub mod settings_defaults;
-pub mod settings_keys;
-pub mod settings_language;
-pub mod settings_reset;
-pub mod settings_resources;
+#[cfg(test)]
+mod settings_reset_tests;
 #[cfg(test)]
 pub mod settings_snapshots;
-pub mod settings_storage;
 #[cfg(test)]
 pub mod settings_storage_support_tests;
-pub mod settings_support;
 pub mod sign_editor;
 #[cfg(any(test, feature = "test-support"))]
 pub mod snapshot;
-pub mod start_feed;
 #[cfg(test)]
 mod store_tests;
-mod template_screen;
 #[cfg(test)]
 pub mod tests;
 mod texture_sources;
 pub mod toast_screen;
-pub mod vrr_setting;
-pub mod vsync_setting;
 
-pub use chat_screen::{CHAT_SCREEN, ChatHit};
-pub use container_data::observe_station_block;
-pub use emote_screen::{EMOTE_EQUIP_POPUP, EMOTE_SCREEN, EmoteHit};
-pub use experience_modal::ExperienceModal;
-
-pub use loading_screen::{LOADING_SCREEN, LoadingStage};
-pub use mod_screens::ModScreensInput;
-pub use npc::NPC_SCREEN;
-pub use oreui::BedHit;
-pub use sign_editor::SIGN_SCREEN;
-pub use template_screen::ModalEdits;
+pub use containers::observe_station_block;
 
 use super::{UiPresentationError, UiPresentationRuntime};
 use crate::ui_runtime::scene_stack::ScreenSettingsTable;
 use crate::ui_runtime::{LocalFormAction, ServerFormIdentity, UiRuntime};
 use assets::RuntimeUiAssets;
-pub use containers::{container_screen_reference, engine_panel_contains, engine_screen_for};
+pub use containers::{container_screen_reference, engine_screen_for};
 pub use recipe_book::{recipe_book_hover, recipe_book_icons, recipe_book_shown};
 use ui_engine::{
     engine::{FormEngine, screen::PaintFrame},
@@ -156,38 +109,29 @@ pub(super) struct ScreenStates {
     menu_title: Option<menu_title::TitleSource>,
     /// The title splash, picked once per launch.
     splash: std::sync::OnceLock<Option<String>>,
+    /// The menu clock when the splash first drew, which its pulse runs from.
+    splash_epoch: std::sync::OnceLock<f64>,
     /// The form whose render path was last logged, so each form logs once.
     logged: Option<ServerFormIdentity>,
     /// The engine HUD's cached screens.
-    hud: hud::HudScreens,
-    mod_hud: Option<mod_hud::ModHud>,
-    mod_hud_editor: Option<mod_hud_editor::HudEditor>,
-    mod_widgets: Option<mod_widgets::ModWidgets>,
-    mod_crosshair: Option<ui::mod_hud::Crosshair>,
-    player_list: Option<player_list::PlayerList>,
-    mod_panel: Option<mod_panel::ModPanel>,
-    experience: Option<experience::ExperienceChrome>,
-    /// A client part's modal screen.
-    experience_modal: Option<experience_modal::ModalScreen>,
-    /// A player mod's overlay and view.
-    mod_screens: Option<mod_screens::ModScreens>,
-    /// The last container screen's layout.
-    container_cache: Option<containers::ScreenCache>,
-    /// Immutable creative rows reused across hover and scroll frames.
-    book_cache: Option<recipe_book::BookCache>,
-    furnace_cache: Option<furnace_book::FurnaceBookCache>,
+    hud: ui_screens::hud::HudScreens,
+    player_list: Option<ui_screens::player_list::PlayerList>,
+    /// Every mod- and experience-owned surface.
+    pub(super) mod_ui: mod_ui::ModUi,
+    /// The container screens' layout and recipe rows.
+    containers: ui_screens::containers::ContainerScreen,
     /// The menu text caret's blink and its boxes' text.
     menu_caret: menu_caret::MenuCaretState,
     /// The open chat's cached screen.
-    chat: chat_screen::ChatScreen,
-    emote: emote_screen::EmoteScreen,
+    chat: ui_screens::chat_screen::ChatScreen,
+    emote: ui_screens::emote_screen::EmoteScreen,
     /// The bed screen's hits and pointer.
     bed: oreui::BedScreen,
     /// The sign editor's cached screen.
-    sign: sign_editor::SignScreen,
-    credits: credits_screen::CreditsScreen,
+    sign: ui_screens::sign_editor::SignScreen,
+    credits: ui_screens::credits_screen::CreditsScreen,
     /// The credits' skip regions from their last paint.
-    credits_hits: Vec<(credits_screen::CreditsAction, UiRect)>,
+    credits_hits: Vec<(ui_screens::credits_screen::CreditsAction, UiRect)>,
     /// OreUI's artwork, look and motion.
     oreui: oreui::OreUiScreen,
 }
@@ -198,9 +142,9 @@ pub(super) struct FrameProjections {
     /// The server form drawn this build.
     pub(super) form: FormProjection,
     /// The container screen the engine drew this build, with its cell layout.
-    container: Option<(EngineFrame, containers::ScreenLayout)>,
+    container: Option<(EngineFrame, ui_screens::containers::ScreenLayout)>,
     /// Last build's container frame, for this build's pointer hover.
-    previous_container: Option<(EngineFrame, containers::ScreenLayout)>,
+    previous_container: Option<(EngineFrame, ui_screens::containers::ScreenLayout)>,
     /// Keyboard controls include rows outside the pointer's clipped viewports.
     pub(super) menu_focus: Vec<launcher::menu::MenuAction>,
     /// Screen and popup context owning the painted menu controls.
@@ -257,6 +201,7 @@ impl UiPresentationRuntime {
             first_page,
             screen_registry::registry(),
             texture_sources::downloads(),
+            texture_sources::image_work(),
         );
         engine.textures.server_page =
             (self.textures.dynamic_start() + pages::SERVER_UI_PAGE) as u16;
@@ -309,9 +254,7 @@ impl UiPresentationRuntime {
         // A texture-only pack may retain the catalog while changing sprite
         // dimensions, UV metadata, or nine-slice borders used during layout.
         self.screens.hud.invalidate_textures();
-        if let Some(cache) = &mut self.screens.container_cache {
-            cache.invalidate_textures();
-        }
+        self.screens.containers.invalidate_textures();
         if let Some(settings) = pack
             .screen_settings
             .as_ref()
@@ -358,9 +301,7 @@ impl UiPresentationRuntime {
         {
             self.retained_menu = None;
             self.screens.hud.invalidate_textures();
-            if let Some(cache) = &mut self.screens.container_cache {
-                cache.invalidate_textures();
-            }
+            self.screens.containers.invalidate_textures();
             self.sync_server_ui_pages();
         }
     }
@@ -372,8 +313,9 @@ impl UiPresentationRuntime {
             .engine
             .as_mut()
             .is_some_and(|engine| engine.take_server_pages().is_some());
-        let changed =
-            self.refresh_experience_modal_pages() | self.refresh_mod_screen_pages() | server;
+        let changed = self.screens.mod_ui.refresh_experience_modal_pages()
+            | self.screens.mod_ui.refresh_mod_screen_pages()
+            | server;
         // Server textures too big for a server page draw from full-resolution art.
         let set = super::menu_artwork::ArtworkSet {
             paths: self.menu_artwork_set.paths.clone(),
@@ -600,9 +542,7 @@ impl UiPresentationRuntime {
             oreui_slider_tracks,
             ..FrameProjections::default()
         };
-        if let Some(screens) = self.screens.mod_screens.as_mut() {
-            screens.begin_frame();
-        }
+        self.screens.mod_ui.begin_mod_screens_frame();
     }
 
     /// Draws the open container's engine screen.
@@ -730,16 +670,16 @@ impl UiPresentationRuntime {
 /// Screens the host draws beyond [`json_ui::ENGINE_SCREENS`], for the scene settings.
 pub fn host_screen_references() -> impl Iterator<Item = &'static str> {
     [
-        SIGN_SCREEN,
-        EMOTE_SCREEN,
-        EMOTE_EQUIP_POPUP,
-        NPC_SCREEN,
-        toast_screen::TOAST_SCREEN,
+        ui_screens::sign_editor::SIGN_SCREEN,
+        ui_screens::emote_screen::EMOTE_SCREEN,
+        ui_screens::emote_screen::EMOTE_EQUIP_POPUP,
+        ui_screens::npc::NPC_SCREEN,
+        ui_screens::toast_screen::TOAST_SCREEN,
         launcher::store::SDL_SCREEN,
-        crate::ui_runtime::credits::CREDITS_SCREEN,
+        ui_screens::credits_screen::CREDITS_SCREEN,
     ]
     .into_iter()
-    .chain(loading_screen::LOADING_SCREENS)
+    .chain(ui_screens::loading_screen::LOADING_SCREENS)
 }
 
 /// Logs which path draws `identity`, once per form.

@@ -54,7 +54,7 @@ fn resident_source_regions_preserve_coverage_without_heap_allocations() {
             15,
         ),
     ] {
-        let ((count, area), allocations) = crate::allocation_count::count(|| {
+        let ((count, area), allocations) = test_alloc::count(|| {
             sheet.quads(uv, [10.0, 20.0, 110.0, 100.0], 11).fold(
                 (0, 0.0f32),
                 |(count, area), quad| {
@@ -96,7 +96,7 @@ fn source_limit_regions_keep_clamped_and_constant_sampling_covered() {
             v1: 0.5,
         },
     ] {
-        let (area, allocations) = crate::allocation_count::count(|| {
+        let (area, allocations) = test_alloc::count(|| {
             sheet
                 .quads(uv, [0.0, 0.0, 100.0, 10.0], 0)
                 .map(|quad| (quad.dest[2] - quad.dest[0]) * (quad.dest[3] - quad.dest[1]))
@@ -105,32 +105,4 @@ fn source_limit_regions_keep_clamped_and_constant_sampling_covered() {
         assert!((area - 1000.0).abs() < 0.01);
         assert_eq!(allocations, 0);
     }
-}
-
-#[test]
-fn inline_decode_stays_pending_until_collected() {
-    let mut sheets = NativeSheets::default();
-    let source = Source {
-        bytes: Arc::from([0u8; 4].as_slice()),
-        size: [16, 16],
-        packed: [16, 16],
-    };
-    let job = Job {
-        key: "first".into(),
-        bytes: Arc::clone(&source.bytes),
-        plan: Plan::new(source.size).unwrap(),
-        cancelled: Arc::clone(&sheets.cancelled),
-        done: sheets.sender.clone(),
-    };
-    sheets.dispatch(job, None);
-    assert_eq!(sheets.pending.as_deref(), Some("first"));
-    sheets.request("second", &source);
-    assert!(sheets.collect());
-    assert!(sheets.failed("first"), "undecodable bytes fail once");
-    assert!(
-        !sheets.failed("second"),
-        "the sibling waited instead of decoding"
-    );
-    assert!(sheets.pending.is_none());
-    assert!(!sheets.collect());
 }
