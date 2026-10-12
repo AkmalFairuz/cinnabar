@@ -530,9 +530,10 @@ pub fn run(args: args::ClientArgs) -> Result<()> {
     )
     .context("prepare bounded font, HUD, and item-icon texture arrays for UI rendering")?;
     // The gameplay HUD draws through the JSON-UI engine, so its carrier is required.
-    let ui_assets = carriers.ui?;
-    ui_presentation
-        .enable_json_ui(ui_assets)
+    let json_ui = carriers.ui?;
+    json_ui
+        .join()
+        .and_then(|prepared| ui_presentation.enable_prepared_json_ui(prepared))
         .map_err(|reason| anyhow::anyhow!("JSON-UI engine failed to start: {reason}"))?;
     let ui_catalog = crate::runtime::network::PackUiCatalog(
         ui_presentation
@@ -959,6 +960,7 @@ pub fn run(args: args::ClientArgs) -> Result<()> {
     #[cfg(feature = "enhanced-diagnostics")]
     crate::enhanced_diagnostics::install(&mut app, diagnostic_budget);
     executor::configure_frame_schedule_executors(&mut app);
+    startup::install_first_frame_log(&mut app);
     let exit = app.run();
     client_shell::discord_presence::shutdown(&mut app);
     if let Some(mut network) = app
