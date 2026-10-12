@@ -7739,3 +7739,14 @@ all provisional rule values still require verification before this gate can clos
 - Incomplete: the full armour identifier/class inventory, missing-member defaults, body slots and later component versions still need parity verification. Unverified items and malformed declarations retain explicit unresolved facts.
 
 Effective item durability is shared through required entity-carrier descriptors and session registry admission. Unknown entries and invalid declared maxima stay unresolved; UI and elytra gameplay read the admitted numeric-ID fact. This gate remains incomplete: the full damageable item inventory, native class bindings, numeric component bounds and all network replacement behavior still need verification. The pinned base table preserves the existing positive values and its coverage guard checks their membership in the independent retail inventory.
+
+## Held-item grip admission (incomplete parity)
+
+Item grip facts are compiled into entity carrier 17, checked against the separate
+retail identity inventory and copied through numeric item admission into equipment
+input. Unknown names cannot borrow a tool grip. Explicit session flags, including
+false, replace the compiled upright choice. The existing built-in grip and rod-art
+choices remain provisional compatibility data. Complete native, metadata, version
+and custom base-item coverage is incomplete. Optional Java animation name routing
+remains a separate incomplete admission path. This does not close the complete
+equipment parity gate. `make assets` rebuilds carriers that lack these records.
