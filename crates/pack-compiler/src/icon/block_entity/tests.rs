@@ -16,6 +16,7 @@ fn bone(
     cubes: &[([f32; 3], [f32; 3], [f32; 2])],
 ) -> EntityGeometryBone {
     EntityGeometryBone {
+        locators: Box::default(),
         name: name.into(),
         binding: None,
         texture_meshes: Box::new([]),

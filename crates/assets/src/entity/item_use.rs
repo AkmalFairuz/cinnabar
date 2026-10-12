@@ -161,6 +161,15 @@ pub fn diagnostic_profile(identifier: &str) -> ItemUseProfile {
         .unwrap_or_default()
 }
 
+/// Reads the built-in consumption classification without cloning the item profile.
+#[must_use]
+pub fn builtin_consumption(identifier: &str) -> ItemConsumption {
+    match catalog().entries.get(identifier) {
+        Some(ItemUseProfile::Provisional { consumption, .. }) => *consumption,
+        Some(ItemUseProfile::Unresolved) | None => ItemConsumption::Unresolved,
+    }
+}
+
 /// Rejects missing, forged or unsupported admissions against the independent item inventory.
 pub(super) fn validate(compiled: &CompiledEntityAssets) -> Result<(), AssetError> {
     let source = compiled
