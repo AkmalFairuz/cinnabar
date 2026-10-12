@@ -34,8 +34,13 @@ pub fn transfer_handoff_address(host: &str, port: u16) -> Option<String> {
 }
 
 /// Drops retired world and pack snapshots on a worker to avoid frame-thread destruction.
-/// Falls back to dropping here only when the worker cannot start.
+/// Falls back to dropping here only when the worker cannot start; a browser, which has no
+/// threads, always drops here.
 pub fn release_off_frame(retired: impl Send + 'static) {
+    if cfg!(target_arch = "wasm32") {
+        drop(retired);
+        return;
+    }
     let spawned = std::thread::Builder::new()
         .name("session-release".to_owned())
         .spawn(move || drop(retired));
