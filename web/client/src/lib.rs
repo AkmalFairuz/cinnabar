@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use assets::carriers::file::MemoryCarriers;
-use bedrock_client::args::{ClientArgs, ParseOutcome};
+use cinnabar::args::{ClientArgs, ParseOutcome};
 use launcher::install_layout::InstallLayout;
 use wasm_bindgen::prelude::*;
 
@@ -61,14 +61,14 @@ pub fn language_carrier_dir() -> String {
 /// Global Resources, as the in-game Import button does.
 #[wasm_bindgen]
 pub fn import_resource_pack(name: String, bytes: Vec<u8>) {
-    bedrock_client::import_resource_pack(name, bytes);
+    cinnabar::import_resource_pack(name, bytes);
 }
 
 /// The file extensions the Global Resources import accepts.
 #[wasm_bindgen]
 #[must_use]
 pub fn resource_pack_extensions() -> Vec<String> {
-    bedrock_client::resource_pack_extensions()
+    cinnabar::resource_pack_extensions()
         .iter()
         .map(|extension| (*extension).to_owned())
         .collect()
@@ -178,7 +178,7 @@ pub fn start(
 ) -> Result<(), JsError> {
     // Startup runs before Bevy installs its own hook; panics should reach the console too.
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    bedrock_client::startup_progress::set_reporter(move |progress| {
+    cinnabar::startup_progress::set_reporter(move |progress| {
         let fraction = progress
             .fraction
             .map_or(JsValue::NULL, |fraction| JsValue::from_f64(fraction.into()));
@@ -205,6 +205,6 @@ pub fn start(
         url: relay_url,
         session_id,
     };
-    bedrock_client::run_with(args, bedrock_client::CoreLink::Relay(relay))
+    cinnabar::run_with(args, cinnabar::CoreLink::Relay(relay))
         .map_err(|error| JsError::new(&format!("{error:#}")))
 }

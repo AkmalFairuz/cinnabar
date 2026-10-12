@@ -9253,8 +9253,8 @@ name = "web-client"
 version = "0.1.12"
 dependencies = [
  "assets",
- "bedrock-client",
  "bridge",
+ "cinnabar",
  "client-shell",
  "console_error_panic_hook",
  "js-sys",
