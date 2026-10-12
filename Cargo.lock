@@ -121,6 +121,7 @@ name = "actor-animation"
 version = "0.1.12"
 dependencies = [
  "assets",
+ "async-platform",
  "protocol",
  "rayon",
  "render-api",

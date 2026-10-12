@@ -95,7 +95,7 @@ forbidden_dependencies = ["asset-compiler", "bevy", "wgpu"]
 [[crates]]
 name = "actor-animation"
 path = "crates/actor-animation"
-allowed_dependencies = ["assets", "protocol", "render-api", "render-model", "world"]
+allowed_dependencies = ["assets", "protocol", "render-api", "render-model", "world", "async-platform"]
 forbidden_dependencies = ["asset-compiler", "pack-compiler", "client-world", "chunk-pipeline", "bevy", "wgpu"]
 forbidden_transitive_dependencies = ["app", "bedrock-client", "client-world", "chunk-pipeline", "meshing", "ui", "json-ui", "render", "bevy", "bevy_*", "wgpu*"]
 test_support_features = ["test-support"]
