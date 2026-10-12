@@ -145,12 +145,16 @@ pub fn extract_nametag(
         return None;
     }
     let text = tag_text(actor, name, distance_squared, scoreboards);
+    // A glyph needs at least one byte; each additional styled span needs a code and a glyph.
+    let line_bytes = ui::UiLimits::MAX_TEXT_BYTES
+        .min(ui::MAX_GLYPHS_PER_LAYOUT)
+        .min(ui::MAX_TEXT_SPANS.saturating_mul("§aA".len()));
     // A tag holds several formatted lines, so it is bounded as the metadata string it came from
     // rather than as one line of presented text.
     let lines: Vec<Arc<str>> = bounded_text(&text, protocol::MAX_ACTOR_METADATA_STRING_BYTES)
         .split('\n')
         .filter(|line| !line.is_empty())
-        .map(Arc::from)
+        .map(|line| Arc::from(bounded_text(line, line_bytes)))
         .collect();
     if lines.is_empty() {
         return None;

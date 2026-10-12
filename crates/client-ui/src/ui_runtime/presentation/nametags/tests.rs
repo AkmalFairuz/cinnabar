@@ -68,12 +68,17 @@ pub(in crate::ui_runtime::presentation) fn anchor(name: &str) -> NametagAnchor {
 
 fn scene(anchors: &[NametagAnchor]) -> NametagScene {
     let font = ui_engine::test_support::fixture_font();
+    scene_with_font(anchors, &font)
+}
+
+/// Builds a scene with a supplied font and a fresh line atlas.
+fn scene_with_font(anchors: &[NametagAnchor], font: &RuntimeFontCatalog) -> NametagScene {
     build_nametag_scene(
         anchors,
-        &font,
+        font,
         &mut TextLayoutCache::new(8, 1 << 20),
         &mut NametagAtlas::default(),
-        &|page| super::super::nametag_atlas::font_page(&font, page),
+        &|page| super::super::nametag_atlas::font_page(font, page),
     )
 }
 
@@ -425,4 +430,95 @@ fn long_formatted_server_tags_keep_every_line() {
     .unwrap();
     let kept: Vec<&str> = anchor.lines.iter().map(|line| &**line).collect();
     assert_eq!(kept, lines);
+}
+
+#[test]
+fn long_server_tag_lines_render_bounded_utf8_prefixes() {
+    for text in ["A".repeat(20_000), "界".repeat(20_000 / "界".len() + 1)] {
+        let tag = extract_nametag(
+            &actor(),
+            Vec3::new(0.0, 1.62, 5.0),
+            None,
+            Arc::from(text.as_str()),
+            &ui::ScoreboardStore::default(),
+            0.5,
+        )
+        .unwrap();
+        assert_eq!(tag.lines.len(), 1);
+        assert_eq!(
+            tag.lines[0].as_ref(),
+            bounded_text(&text, ui::UiLimits::MAX_TEXT_BYTES)
+        );
+        assert!(tag.lines[0].chars().count() <= ui::MAX_GLYPHS_PER_LAYOUT);
+        let scene = scene(&[tag]);
+        assert_eq!(scene.records.len(), NAMETAG_RECORDS_PER_LINE);
+        assert!(scene.atlas[0].rgba8.iter().any(|&byte| byte != 0));
+        assert!(scene.atlas[0].cell[2] <= NAMETAG_ATLAS_SIDE);
+        assert!(scene.atlas[0].cell[3] <= NAMETAG_ATLAS_SIDE);
+    }
+}
+
+#[test]
+fn long_formatted_lines_keep_the_aggregate_multiline_budget() {
+    let line = "§aA§bB".repeat(ui::MAX_TEXT_SPANS / 2 + 1);
+    let tag = extract_nametag(
+        &actor(),
+        Vec3::new(0.0, 1.62, 5.0),
+        None,
+        format!("{line}\n{line}").into(),
+        &ui::ScoreboardStore::default(),
+        0.5,
+    )
+    .unwrap();
+    assert_eq!(tag.lines.len(), 2);
+    assert!(tag.lines.iter().map(|line| line.len()).sum::<usize>() > ui::UiLimits::MAX_TEXT_BYTES);
+    for line in &tag.lines {
+        assert!(line.len() <= ui::UiLimits::MAX_TEXT_BYTES);
+        assert!(
+            ui::parse_bedrock_text(line, ui::UiLimits::MAX_TEXT_BYTES)
+                .unwrap()
+                .len()
+                <= ui::MAX_TEXT_SPANS
+        );
+    }
+    assert_eq!(scene(&[tag]).records.len(), 2 * NAMETAG_RECORDS_PER_LINE);
+}
+
+#[test]
+fn wide_advance_lines_keep_a_prefix_instead_of_exceeding_the_wrap_limit() {
+    let font = ui_engine::test_support::fixture_font();
+    let mut metrics = *font.glyph('0').unwrap();
+    metrics.advance_64 = i16::MAX;
+    let font = font.with_glyphs(
+        &[assets::SheetGlyph {
+            metrics,
+            draw_size_64: [
+                u32::from(metrics.uv[2] - metrics.uv[0]) * 64,
+                u32::from(metrics.uv[3] - metrics.uv[1]) * 64,
+            ],
+        }],
+        |_| true,
+    );
+    let glyphs_per_line = NAMETAG_ATLAS_SIDE as usize / (i16::MAX as usize / 64 + 1);
+    let text = "0".repeat(ui::MAX_WRAP_LINES * glyphs_per_line + 1);
+    assert!(text.len() <= ui::UiLimits::MAX_TEXT_BYTES);
+    let scene = scene_with_font(&[anchor(&text)], &font);
+    assert_eq!(scene.records.len(), NAMETAG_RECORDS_PER_LINE);
+    assert!(scene.atlas[0].cell[2] <= NAMETAG_ATLAS_SIDE);
+}
+
+#[test]
+fn oversized_glyph_ink_is_clipped_to_the_atlas_cell() {
+    let font = ui_engine::test_support::fixture_font();
+    let font = font.with_glyphs(
+        &[assets::SheetGlyph {
+            metrics: *font.glyph('0').unwrap(),
+            draw_size_64: [(NAMETAG_ATLAS_SIDE + 1) * 64; 2],
+        }],
+        |_| true,
+    );
+    let scene = scene_with_font(&[anchor("0")], &font);
+    assert_eq!(scene.records.len(), NAMETAG_RECORDS_PER_LINE);
+    assert_eq!(scene.atlas[0].cell[2..], [NAMETAG_ATLAS_SIDE; 2]);
+    assert!(scene.atlas[0].rgba8.iter().any(|&byte| byte != 0));
 }
