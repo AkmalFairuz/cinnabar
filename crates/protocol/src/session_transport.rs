@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 use std::future::{Future, poll_fn};
-use std::path::Path;
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::task::{Context, Poll, ready};
