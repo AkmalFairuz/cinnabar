@@ -2911,6 +2911,7 @@ version = "0.1.12"
 dependencies = [
  "ash",
  "assets",
+ "base64",
  "bevy",
  "bridge",
  "chunk-pipeline",
