@@ -15,7 +15,7 @@ reads = [
 ]
 
 [features]
-test-support = []
+test-support = ["ui-engine/test-support"]
 tracy = []
 
 [dependencies]
@@ -38,6 +38,7 @@ json-ui = { path = "../json-ui" }
 protocol = { path = "../protocol" }
 semantic-input = { path = "../input" }
 ui = { path = "../ui" }
+ui-engine = { path = "../ui-engine" }
 world = { path = "../world" }
 server-experience = { path = "../server-experience" }
 image.workspace = true
@@ -54,10 +55,12 @@ tokio.workspace = true
 resource-pack = { path = "../resource-pack" }
 
 [dev-dependencies]
+ui-engine = { path = "../ui-engine", features = ["test-support"] }
 launcher-host = { path = "../launcher-host", features = ["test-support"] }
 test-time = { path = "../test-time" }
 tempfile = "3"
 protocol = { path = "../protocol", features = ["test-support"] }
+resource-pack = { path = "../resource-pack", features = ["test-support"] }
 mod-host = { path = "../mod-host" }
 pack-compiler = { path = "../pack-compiler" }
 zip = { version = "7", default-features = false, features = ["deflate-flate2-zlib-rs"] }
