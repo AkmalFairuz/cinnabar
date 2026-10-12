@@ -22,7 +22,7 @@ mod effects;
 mod encoding;
 pub mod entity;
 mod environment_settings;
-mod equipment;
+pub mod equipment;
 mod error;
 mod family_routing;
 mod fire;
@@ -33,7 +33,7 @@ mod fsb;
 mod glyph_sheet;
 pub mod gui_item;
 mod hud;
-mod hud_extras;
+pub mod hud_extras;
 mod icon;
 pub mod item;
 mod lang;
@@ -161,7 +161,10 @@ pub use entity::{
     bind_molang_queries, encode_entity_blob, entity_render_pattern_matches, molang_call,
     molang_program_stack, validate_entity_geometry_inheritance,
 };
-pub use entity::{PACK_EQUIPMENT_INDEX_BASE, PACK_RIG_ID_BASE};
+pub use entity::{
+    PACK_EQUIPMENT_INDEX_BASE, PACK_RIG_ID_BASE, interactions, item_use, placement,
+    seats as entity_seats,
+};
 pub use environment_settings::{CloudQuality, EnvironmentQualitySettings, PrecipitationQuality};
 pub use equipment::{
     ArmorSlot, AttachablePose, AttachablePoseBone, CompiledItemAttackCooldown,
@@ -172,7 +175,7 @@ pub use equipment::{
     MAX_EQUIPMENT_PIXEL_BYTES, MAX_EQUIPMENT_TEXTURE_SIDE, MAX_EQUIPMENT_TEXTURES,
     RuntimeEquipmentCatalog, color_mask_texel, encode_equipment_catalog,
     encode_equipment_catalog_full, encode_equipment_catalog_with_attack_timings,
-    encode_equipment_catalog_with_food, encode_equipment_catalog_with_textures,
+    encode_equipment_catalog_with_textures, encode_equipment_catalog_with_use_profiles,
 };
 pub use error::AssetError;
 pub use fire::{FIRE_ATTACHMENT_MASK_COUNT, FIRE_SUPPORTED_QUAD_COUNT, FIRE_TEMPLATE_COUNT};
@@ -181,13 +184,12 @@ pub use fog_layers::resolve_fog_layers;
 pub use fog_transition::FogTransition;
 pub use font::{
     CompiledFontCatalog, FONT_CARRIER_MAGIC, FONT_CARRIER_SCHEMA, FONT_FACE_BUNDLE_MAGIC,
-    FONT_FACE_BUNDLE_SCHEMA, FONT_FALLBACK_ATLAS_SIDE, FontFaceRaster, decode_font_face_bundle,
-    encode_font_face_bundle,
-    FONT_RASTER_EM_PIXELS, FONT_STYLE_COVERAGE_GAMMA, FONT_STYLE_SDF, FontCatalogError,
-    FontCatalogIdentity, FontGlyphRequests, FontLineMetrics, FontPixels, FontRendering,
-    FontTexturePage, GlyphMetrics, MAX_FONT_CARRIER_BYTES, MAX_FONT_FALLBACK_PAGES,
-    MAX_FONT_GLYPHS, MAX_FONT_KERNING_PAIRS, MAX_FONT_PAGE_SIDE, MAX_FONT_PAGES,
-    MAX_FONT_PATH_BYTES, MAX_FONT_SOURCE_BYTES, RuntimeFontCatalog, encode_font_catalog,
+    FONT_FACE_BUNDLE_SCHEMA, FONT_FALLBACK_ATLAS_SIDE, FONT_RASTER_EM_PIXELS,
+    FONT_STYLE_COVERAGE_GAMMA, FONT_STYLE_SDF, FontCatalogError, FontCatalogIdentity,
+    FontFaceRaster, FontLineMetrics, FontPixels, FontRendering, FontTexturePage, GlyphMetrics,
+    MAX_FONT_CARRIER_BYTES, MAX_FONT_GLYPHS, MAX_FONT_KERNING_PAIRS, MAX_FONT_PAGE_SIDE,
+    MAX_FONT_PAGES, MAX_FONT_PATH_BYTES, MAX_FONT_SOURCE_BYTES, RuntimeFontCatalog,
+    decode_font_face_bundle, encode_font_catalog, encode_font_face_bundle,
 };
 pub use fsb::{DecodedSound, FsbError, MAX_FSB_INPUT_BYTES, MAX_FSB_PCM_BYTES, decode_fsb5};
 pub use glyph_sheet::{CellGlyph, GlyphAtlas, GlyphSheet, SHEET_GRID, SheetGlyph};
@@ -197,9 +199,6 @@ pub use hud::{
     HudCatalogError, HudTexture, HudTextureRole, MAX_HUD_TEXTURE_BYTES, RuntimeHudCatalog,
     encode_hud_catalog,
 };
-pub use hud_extras::{HUD_EXTRA_SIDE, HUD_EXTRAS_MAGIC, HUD_EXTRAS_VERSION, MAX_HUD_EXTRAS_BYTES};
-pub use hud_extras::{HudExtraRole, HudExtras, HudExtrasError};
-pub use hud_extras::{decode_hud_extras, encode_hud_extras};
 pub use icon::{
     BLOCK_ITEM_FACE_SIDE, BLOCK_ITEM_SHEET_GRID, BLOCK_ITEM_SHEET_SIZE, ICON_CARRIER_MAGIC,
     ICON_CARRIER_VERSION, IconBlockModel, IconBlockSheet, IconEntry, IconSprite,
