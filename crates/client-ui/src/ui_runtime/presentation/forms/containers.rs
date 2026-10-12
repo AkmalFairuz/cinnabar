@@ -270,9 +270,82 @@ impl UiPresentationRuntime {
         else {
             return Ok(false);
         };
+        let size = [width, height];
+        match self.paint_container(
+            player_runtime,
+            runtime,
+            layout,
+            previous,
+            nodes,
+            next,
+            metrics,
+            size,
+        ) {
+            Some(frame) => {
+                self.projections.container = Some((frame, layout));
+                Ok(true)
+            }
+            // A screen the engine cannot draw hands containers back to the Java path.
+            None => {
+                self.hud_frame.engine_containers = false;
+                Ok(false)
+            }
+        }
+    }
+
+    /// Paints the personal inventory once while it is closed, into nodes that are thrown away, so
+    /// its first open reuses the screen the engine already resolved, bound and laid out instead
+    /// of building it in the frame the player opens it.
+    pub(in crate::ui_runtime::presentation) fn prewarm_engine_inventory(
+        &mut self,
+        player_runtime: &player_state::PlayerState,
+        runtime: &UiRuntime,
+        metrics: TextMetrics,
+        size: [f32; 2],
+    ) {
+        if !self.hud_frame.engine_containers || runtime.inventory_open() {
+            return;
+        }
         let Some(renderer) = self.engine.as_deref() else {
-            return Ok(false);
+            return;
         };
+        if !self.screens.containers.prewarm_inventory(renderer) {
+            return;
+        }
+        let book = super::recipe_book::recipe_book_shown(player_runtime, runtime);
+        let layout = ScreenLayout::Personal { book };
+        // The scene policy reads the open screen's flags from the engine's own resolved roots.
+        renderer.scene_settings(layout.screen().0, renderer.context());
+        let (mut nodes, mut next) = (Vec::new(), 0);
+        let preview = self.player_preview_view;
+        self.paint_container(
+            player_runtime,
+            runtime,
+            layout,
+            None,
+            &mut nodes,
+            &mut next,
+            metrics,
+            size,
+        );
+        self.player_preview_view = preview;
+    }
+
+    /// Paints `layout` through the engine; `None` when the engine cannot draw it.
+    #[allow(clippy::too_many_arguments)]
+    fn paint_container(
+        &mut self,
+        player_runtime: &player_state::PlayerState,
+        runtime: &UiRuntime,
+        layout: ScreenLayout,
+        previous: Option<&EngineFrame>,
+        nodes: &mut Vec<UiNode>,
+        next: &mut u32,
+        metrics: TextMetrics,
+        [width, height]: [f32; 2],
+    ) -> Option<EngineFrame> {
+        let window_text = &self.hud_frame.window_text;
+        let renderer = self.engine.as_deref()?;
         let (_, title_key) = layout.screen();
         // A mount's screen is titled with its own entity name.
         let mount_key = runtime
@@ -316,8 +389,8 @@ impl UiPresentationRuntime {
             translate: &translate,
             language: runtime.text_generation(),
             now: self.menu_seconds,
-            nodes: &mut *nodes,
-            next: &mut *next,
+            nodes,
+            next,
             renderers: &mut renderers,
         };
         let drawn = self.screens.containers.paint(
@@ -338,17 +411,13 @@ impl UiPresentationRuntime {
         if let Some(view) = preview_view.get() {
             self.player_preview_view = view;
         }
-        match drawn {
-            Some(frame) => {
-                self.projections.container = Some((frame, layout));
-                Ok(true)
-            }
-            // A screen the engine cannot draw hands containers back to the Java path.
-            None => {
-                self.hud_frame.engine_containers = false;
-                Ok(false)
-            }
-        }
+        drawn
+    }
+
+    /// Screens the container paints have resolved, for cache tests.
+    #[cfg(test)]
+    pub fn engine_container_resolves(&self) -> usize {
+        self.screens.containers.resolves()
     }
 
     /// Layouts the current container screen has run, for cache tests.
