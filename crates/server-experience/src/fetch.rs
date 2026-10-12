@@ -82,17 +82,6 @@ pub fn public_address(ip: IpAddr) -> bool {
     }
 }
 
-/// Browsers cannot pin a download to the public addresses [`fetch`] checks, so they fetch nothing.
-#[cfg(target_arch = "wasm32")]
-pub async fn fetch(
-    _text: &str,
-    _origins: &BTreeSet<String>,
-    _expected_bytes: usize,
-    _range: Option<(u64, u64, u64)>,
-) -> Result<Vec<u8>> {
-    anyhow::bail!("server experience downloads are unavailable in a browser")
-}
-
 /// Fetches one immutable object or exact byte range; dropping the future cancels it.
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn fetch(
