@@ -23,6 +23,7 @@ mod packet;
 mod particle;
 mod permissions;
 mod primitive_shapes;
+mod raw_packet;
 mod raw_text;
 mod respawn;
 mod settings;
@@ -157,7 +158,7 @@ pub use item::{
     ActorActionEvent, ActorActionKind, ActorHandedness, ArmorEquipmentEvent, EquipmentEvent,
     FoodProperties, HOTBAR_SLOT_COUNT, ItemActorEvent, ItemAttackCooldown, ItemAttackTiming,
     ItemBook, ItemComponents, ItemDisplay, ItemPacketError, ItemRegistryEntry, ItemRegistryEvent,
-    ItemRegistryVersion, ItemStackFacts, ItemStackFactsCache, KineticWeaponTiming,
+    ItemRegistryVersion, ItemStackFacts, ItemStackFactsCache, ItemUseCooldown, KineticWeaponTiming,
     MAX_ACTION_IDENTIFIER_BYTES, MAX_ANIMATE_ENTITY_IDS, MAX_ANIMATION_IDENTIFIER_BYTES,
     MAX_BOOK_PAGES, MAX_ITEM_EXTRA_BYTES, MAX_ITEM_REGISTRY_ENTRIES, NetworkItemStack, item_book,
     item_bundle_id, item_charged_projectile, item_custom_color, item_display,
@@ -199,7 +200,7 @@ pub use render_api::primitive_shapes::{
     PrimitiveShapeChange, PrimitiveShapeData, PrimitiveShapeKind, PrimitiveShapeUpdate,
     PrimitiveShapesEvent, PrimitiveText,
 };
-pub use session_transport::{SessionTransport, report_pack_application};
+pub use session_transport::report_pack_application;
 pub use settings::request_chunk_radius_packet;
 pub use transfer::{MAX_TRANSFER_HOST_BYTES, ServerTransferEvent, ServerTransferRejection};
 pub use translation_parameter::localize_parameter_prefix;

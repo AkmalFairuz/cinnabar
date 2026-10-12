@@ -21,7 +21,7 @@ const HEAD_HEIGHT_FRACTION: f32 = 0.9;
 const HIT_INTERVAL: f32 = 0.2;
 /// Seconds between eating/drinking sounds while an item is in use; needs native measurement.
 const CONSUME_INTERVAL: f32 = 0.25;
-const SECONDS_PER_TICK: f32 = world::TICK_DURATION.as_secs_f32();
+const SECONDS_PER_TICK: f32 = simulation_clock::TICK_DURATION.as_secs_f32();
 
 /// One bite of the local player's food, in step with its eating sound; particles scatter the
 /// item's crumbs from it.
@@ -56,20 +56,25 @@ fn center(cell: [i32; 3]) -> [f32; 3] {
     cell.map(|axis| axis as f32 + 0.5)
 }
 
-/// The player sound event voiced while `identifier` is being consumed.
-pub fn is_consumable(identifier: &str) -> Option<&'static str> {
-    use actor_animation::consumables::{ConsumeAnimation, consume_animation};
-    match consume_animation(identifier)? {
-        _ if identifier == "minecraft:honey_bottle" => Some("drink.honey"),
-        ConsumeAnimation::Drink => Some("drink"),
-        ConsumeAnimation::Eat => Some("eat"),
+/// Selects the sound event from the same admitted consumption fact as first-person animation.
+pub fn consume_event(consumption: assets::item_use::ItemConsumption) -> Option<&'static str> {
+    match consumption {
+        assets::item_use::ItemConsumption::Eat => Some("eat"),
+        assets::item_use::ItemConsumption::Drink => Some("drink"),
+        assets::item_use::ItemConsumption::Honey => Some("drink.honey"),
+        assets::item_use::ItemConsumption::Unresolved | assets::item_use::ItemConsumption::None => {
+            None
+        }
     }
 }
 
 /// Whether the local player's bites of `identifier` come as [`LocalEatingCue`]s; other foods'
 /// crumbs stay with the server's feed notices.
 pub fn predicts_bites(identifier: &str) -> bool {
-    is_consumable(identifier) == Some("eat")
+    matches!(
+        actor_animation::consumables::consume_animation(identifier),
+        Some(actor_animation::consumables::ConsumeAnimation::Eat)
+    )
 }
 
 /// Voices local block placement, mining hits and the predicted break of the mined block.
@@ -231,19 +236,20 @@ pub fn drive_consume_audio(
     let using = stream
         .and_then(|stream| stream.authority().actor(stream.local_player_runtime_id()))
         .is_some_and(|actor| actor.is_using_item());
-    let item = stream.zip(ui).filter(|_| using).and_then(|(stream, _)| {
-        let identifier = stream
-            .authority()
-            .canonical_item_stack(player_runtime.selected_stack()?)?
-            .identifier?;
-        let event = is_consumable(&identifier)?;
-        Some((identifier, event))
+    let admitted = stream.zip(ui).filter(|_| using).and_then(|(stream, _)| {
+        let stack = player_runtime.selected_stack()?;
+        let profile = stream.authority().item_use_profile(stack.network_id);
+        let identifier = stream.authority().canonical_item_stack(stack)?.identifier?;
+        Some((
+            identifier,
+            consume_event(profile.consumption)?,
+            profile.ticks?,
+        ))
     });
-    let duration = stream
-        .zip(item.as_ref())
-        .and_then(|(stream, (identifier, _))| {
-            Some(stream.authority().item_max_use_ticks(identifier)? as f32 * SECONDS_PER_TICK)
-        });
+    let duration = admitted
+        .as_ref()
+        .map(|(_, _, ticks)| *ticks as f32 * SECONDS_PER_TICK);
+    let item = admitted.map(|(identifier, event, _)| (identifier, event));
     let identifier = item.as_ref().map(|(identifier, _)| Arc::clone(identifier));
     let cues = state.advance(item, duration, time.delta_secs());
     if cues.is_empty() {
@@ -350,13 +356,26 @@ pub fn drive_actor_audio(
 mod tests {
     use super::*;
 
+    /// Resolves an original compatibility fixture before checking its consumption sound.
+    fn fixture_consume_event(identifier: &str) -> Option<&'static str> {
+        let profile = assets::item_use::diagnostic_profile(identifier);
+        consume_event(client_world::resolve_item_use(&profile, Some(32), None).consumption)
+    }
+
     #[test]
     fn consumables_are_classified() {
-        assert_eq!(is_consumable("minecraft:bread"), Some("eat"));
-        assert_eq!(is_consumable("minecraft:potion"), Some("drink"));
-        assert_eq!(is_consumable("minecraft:honey_bottle"), Some("drink.honey"));
-        assert_eq!(is_consumable("minecraft:experience_bottle"), None, "thrown");
-        assert_eq!(is_consumable("minecraft:stone"), None);
+        assert_eq!(fixture_consume_event("minecraft:bread"), Some("eat"));
+        assert_eq!(fixture_consume_event("minecraft:potion"), Some("drink"));
+        assert_eq!(
+            fixture_consume_event("minecraft:honey_bottle"),
+            Some("drink.honey")
+        );
+        assert_eq!(
+            fixture_consume_event("minecraft:experience_bottle"),
+            None,
+            "thrown"
+        );
+        assert_eq!(fixture_consume_event("minecraft:stone"), None);
     }
 
     // A server-defined food had neither a predicted bite nor the server's feed crumbs.
