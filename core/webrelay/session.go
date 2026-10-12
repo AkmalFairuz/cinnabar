@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/hashimthearab/rust-mcbe/core/authcache"
-	"github.com/hashimthearab/rust-mcbe/core/authflow"
 	"github.com/hashimthearab/rust-mcbe/core/catalog"
 	"github.com/hashimthearab/rust-mcbe/core/control"
 	"github.com/hashimthearab/rust-mcbe/core/launcher"
@@ -45,6 +44,8 @@ type webSession struct {
 	account      *authcache.Account
 	closeAccount context.CancelFunc
 	cancelSignIn context.CancelFunc
+	signInSeq    uint64         // numbers sign-ins; only the latest, while cancelSignIn is set, may publish
+	signIns      sync.WaitGroup // running sign-in workers
 	handler      *proxy.SessionHandler
 	playing      bool
 	attached     int       // open control and play connections
@@ -131,19 +132,30 @@ func (session *webSession) SignIn() error {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(session.relay.ctx, session.relay.cfg.SignInTimeout)
+	session.signInSeq++
 	session.cancelSignIn = cancel
-	go session.runSignIn(ctx, cancel)
+	session.signIns.Add(1)
+	go session.runSignIn(ctx, cancel, session.signInSeq)
 	return nil
 }
 
-func (session *webSession) runSignIn(ctx context.Context, cancel context.CancelFunc) {
+// currentSignInLocked reports whether sign-in seq is still wanted: SignOut, a later SignIn or
+// closing the session makes its prompt and outcome stale.
+func (session *webSession) currentSignInLocked(seq uint64) bool {
+	return session.cancelSignIn != nil && session.signInSeq == seq && !session.closed
+}
+
+func (session *webSession) runSignIn(ctx context.Context, cancel context.CancelFunc, seq uint64) {
+	defer session.signIns.Done()
 	defer cancel()
-	token, err := (authflow.DeviceFlow{}).Request(ctx, func(prompt *oauth2.DeviceAuthResponse) error {
+	token, err := session.relay.deviceFlow.Request(ctx, func(prompt *oauth2.DeviceAuthResponse) error {
 		session.mu.Lock()
 		defer session.mu.Unlock()
-		session.setAuthLocked(control.AuthV1{
-			State: control.AuthAwaitingCode, VerificationURI: prompt.VerificationURI, UserCode: prompt.UserCode,
-		})
+		if session.currentSignInLocked(seq) {
+			session.setAuthLocked(control.AuthV1{
+				State: control.AuthAwaitingCode, VerificationURI: prompt.VerificationURI, UserCode: prompt.UserCode,
+			})
+		}
 		return nil
 	})
 	var account *authcache.Account
@@ -175,8 +187,11 @@ func (session *webSession) runSignIn(ctx context.Context, cancel context.CancelF
 
 	session.mu.Lock()
 	defer session.mu.Unlock()
-	session.cancelSignIn = nil
-	if session.closed || session.playing {
+	current := session.currentSignInLocked(seq)
+	if current {
+		session.cancelSignIn = nil
+	}
+	if !current || session.playing {
 		if err == nil {
 			_ = handler.Close()
 			_ = account.Close()
@@ -291,6 +306,8 @@ func (session *webSession) close() {
 	session.dropAccountLocked()
 	handler := session.handler
 	session.mu.Unlock()
+	// A cancelled worker still releases any account it built before it returns.
+	session.signIns.Wait()
 	if err := handler.Close(); err != nil {
 		session.relay.logger.Warn("web session close", "error", err)
 	}

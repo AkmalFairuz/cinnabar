@@ -188,7 +188,6 @@ func (relay *Relay) servePlay(w http.ResponseWriter, r *http.Request) {
 	}
 	relay.conns.Add(1)
 	defer relay.conns.Done()
-	conn.SetReadLimit(playMessageLimit)
 	if !relay.allow(client) {
 		_ = conn.Close(websocket.StatusTryAgainLater, refusal(errRateLimited))
 		return
@@ -209,6 +208,7 @@ func (relay *Relay) servePlay(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(relay.ctx)
 	defer cancel()
 	stream := websocket.NetConn(ctx, conn, websocket.MessageBinary)
+	conn.SetReadLimit(playMessageLimit) // NetConn lifts the limit
 	limited := &uploadLimitedConn{Conn: stream, limiter: rate.NewLimiter(rate.Limit(relay.cfg.UploadBytesPerSec), playMessageLimit)}
 	if err := handler.ServeConn(ctx, limited); err != nil && ctx.Err() == nil {
 		relay.logger.Debug("web play connection ended", "session", session.id[:8], "error", err)

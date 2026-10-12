@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashimthearab/rust-mcbe/core/authflow"
 	"golang.org/x/time/rate"
 )
 
@@ -69,6 +70,8 @@ type Relay struct {
 	perIP    map[netip.Addr]int
 	limiters map[netip.Addr]*clientLimiter
 	vanilla  chan struct{} // one slot per concurrent pass-through download
+
+	deviceFlow authflow.DeviceFlow // zero signs in with the Android client
 }
 
 type clientLimiter struct {

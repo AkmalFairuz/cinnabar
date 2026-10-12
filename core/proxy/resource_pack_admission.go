@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -473,6 +474,7 @@ type preparedConnections struct {
 	resolveTarget               func(context.Context) (*resolvedUpstreamTarget, error)
 	serverTrust                 minecraft.ServerTrust // decides transfer hops to addressed NetherNet servers
 	addressNetwork              minecraft.Network     // nil probes transfer hops for NetherNet; set, it carries every hop
+	httpClient                  *http.Client          // the upstream Dialer's HTTP client; nil uses http.DefaultClient
 	dialTarget                  func(context.Context, *resolvedUpstreamTarget, minecraft.Dialer) (upstreamSession, error)
 	captureResourcePackStack    func(upstreamSession, func(*resource.Pack) bool) (*selectedResourcePackStack, error)
 	resourcePackCache           minecraft.ResourcePackCache
@@ -665,6 +667,7 @@ func (connections *preparedConnections) connect(ctx context.Context, downstream 
 		clientCache = clientCache && session.sessionClientCache()
 	}
 	dialer := newUpstreamDialerForAdmission(downstream, tokenSource, cache, packAdmission, clientCache)
+	dialer.HTTPClient = connections.httpClient
 	if target.clientData != nil {
 		target.clientData(&dialer.ClientData)
 	}

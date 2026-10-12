@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/http"
+	"time"
 
 	"github.com/hashimthearab/rust-mcbe/core/authcache"
 	"github.com/sandertv/go-raknet"
@@ -17,8 +19,8 @@ import (
 type SessionHandlerConfig struct {
 	Account *authcache.Account // nil joins offline
 	Logger  *slog.Logger
-	// Dialer opens every upstream socket: sessions join addressed servers over RakNet only, including
-	// transfer hops, so the dialer decides which hosts the handler may reach.
+	// Dialer opens every upstream socket: RakNet joins, transfer hops included, and HTTP requests
+	// such as URL pack downloads, so the dialer decides which hosts the handler may reach.
 	Dialer raknet.UpstreamDialer
 	// SelectTarget maps a Connect's connect.v1 target to an address; nil rejects targeted Connects.
 	SelectTarget func(ctx context.Context, kind, value string) (string, error)
@@ -48,6 +50,7 @@ func NewSessionHandler(cfg SessionHandlerConfig) (*SessionHandler, error) {
 	transfers := new(TransferState)
 	prepared := newPreparedConnections("", cfg.Account, logger)
 	prepared.addressNetwork = network
+	prepared.httpClient = dialerHTTPClient(cfg.Dialer)
 	prepared.connectProgress = cfg.ConnectProgress
 	dial := func(_ context.Context, address string) (*resolvedUpstreamTarget, error) {
 		return &resolvedUpstreamTarget{address: address, network: network}, nil
@@ -77,6 +80,17 @@ func NewSessionHandler(cfg SessionHandlerConfig) (*SessionHandler, error) {
 	}}, nil
 }
 
+// dialerHTTPClient returns a client whose every connection, redirect hops included, is opened by
+// dialer; it ignores environment proxies, which would carry requests past the dialer.
+func dialerHTTPClient(dialer raknet.UpstreamDialer) *http.Client {
+	return &http.Client{Transport: &http.Transport{
+		DialContext:         dialer.DialContext,
+		ForceAttemptHTTP2:   true,
+		TLSHandshakeTimeout: 10 * time.Second,
+		IdleConnTimeout:     90 * time.Second,
+	}}
+}
+
 // ServeConn runs one session on conn until it ends; the caller closes conn afterwards.
 func (handler *SessionHandler) ServeConn(ctx context.Context, conn net.Conn) error {
 	return handler.server.serveConn(ctx, conn)
@@ -84,5 +98,6 @@ func (handler *SessionHandler) ServeConn(ctx context.Context, conn net.Conn) err
 
 // Close ends upstream preparations still in flight; callers first end every ServeConn.
 func (handler *SessionHandler) Close() error {
+	handler.server.prepared.httpClient.CloseIdleConnections()
 	return handler.server.prepared.shutdown()
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -15,11 +16,13 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/hashimthearab/rust-mcbe/core/authflow"
 	"github.com/hashimthearab/rust-mcbe/core/control"
 	"github.com/hashimthearab/rust-mcbe/core/internal/streamnet"
 	"github.com/sandertv/gophertunnel/minecraft"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/login"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
+	"golang.org/x/oauth2"
 )
 
 // Session message kinds, as core/proxy and the Rust bridge define them.
@@ -187,6 +190,37 @@ func TestIdleSessionsExpireAndForgetTheirAccount(t *testing.T) {
 	}
 }
 
+// A sign-in abandoned by SignOut neither shows its prompt nor reports its outcome afterwards.
+func TestSignOutDiscardsTheAbandonedSignIn(t *testing.T) {
+	relay := New(Config{Logger: quietLogger()})
+	defer relay.Close()
+	release := make(chan struct{})
+	relay.deviceFlow = authflow.DeviceFlow{
+		Authorize: func(context.Context) (*oauth2.DeviceAuthResponse, error) {
+			<-release
+			return &oauth2.DeviceAuthResponse{UserCode: "STALE", VerificationURI: "https://example.com/link"}, nil
+		},
+		Token: func(context.Context, *oauth2.DeviceAuthResponse) (*oauth2.Token, error) {
+			return nil, errors.New("denied")
+		},
+	}
+	session, err := relay.createSession(netip.MustParseAddr("198.51.100.7"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := session.SignIn(); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.SignOut(); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	session.signIns.Wait()
+	if state, _ := session.Auth(); state.State != control.AuthSignedOut {
+		t.Fatalf("account state %q after sign-out, want signed out", state.State)
+	}
+}
+
 // joinFrames opens a play connection, sends Connect for target and returns the frames that follow.
 func joinFrames(t *testing.T, server *httptest.Server, id, target string) <-chan []byte {
 	t.Helper()
@@ -274,6 +308,26 @@ func TestPlayJoinsAServerOverWebSockets(t *testing.T) {
 	}
 	if err := json.Unmarshal(handoff[5:5+length], &body); err != nil || body.Identity.DisplayName != "Steve" {
 		t.Fatalf("handoff = %s (%v)", handoff[5:5+length], err)
+	}
+}
+
+// A play message over the upload bound closes the connection instead of reaching the session.
+func TestPlayRefusesOversizedMessages(t *testing.T) {
+	_, server := startRelay(t, Config{})
+	_, id := openControl(t, server)
+	conn, _, err := dialWS(t, wsURL(server, "/v1/session"), nil, PlayProtocol, sessionProtocolPrefix+id)
+	if err != nil {
+		t.Fatalf("dial play: %v", err)
+	}
+	defer conn.CloseNow()
+	// One well-formed session frame whose message is just over the bound.
+	message := make([]byte, 4+playMessageLimit)
+	binary.BigEndian.PutUint32(message, playMessageLimit)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	go func() { _ = conn.Write(ctx, websocket.MessageBinary, message) }()
+	if _, _, err := conn.Read(ctx); websocket.CloseStatus(err) != websocket.StatusMessageTooBig {
+		t.Fatalf("oversized message: %v, want message-too-big", err)
 	}
 }
 
