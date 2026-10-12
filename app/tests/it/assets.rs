@@ -82,6 +82,7 @@ fn synthetic_blob() -> Box<[u8]> {
             model_template: NO_MODEL_TEMPLATE,
             animation: NO_ANIMATION,
             variant: 0,
+            destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
         }]
         .into_boxed_slice(),
         light_properties: vec![::assets::LightProperties::new(0, 15).unwrap()].into_boxed_slice(),
@@ -180,6 +181,7 @@ fn synthetic_entity_blob_with_manifest(seed: u8, source_manifest_sha256: [u8; 32
             identifier: "minecraft:allay".into(),
             source_index: 0,
             dependencies: Box::new([]),
+            mount_equipment: assets::entity::mount::MountEquipment::Unresolved,
         }]
         .into_boxed_slice(),
         geometries: Box::new([]),
@@ -219,7 +221,7 @@ fn synthetic_font_blob_with_manifest(seed: u8, manifest_sha256: [u8; 32]) -> Box
         pixels_sha256: Sha256::digest(&rgba8).into(),
         width: 1,
         height: 1,
-        pixels: FontPixels::Rgba8(rgba8),
+        pixels: FontPixels::Rgba8(rgba8.into()),
     };
     let glyphs = [GlyphMetrics {
         codepoint: '\u{fffd}',

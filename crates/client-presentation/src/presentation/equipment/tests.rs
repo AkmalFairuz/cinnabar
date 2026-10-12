@@ -327,6 +327,7 @@ fn real_carriers_draw_armor_and_report_each_held_item() {
         overlay_rgba8: 0,
     };
     let worn = |identifier: &str| WornItem {
+        grip: assets::item::grip::builtin_item_grip(identifier),
         identifier: Arc::from(identifier),
         metadata: 0,
         damage: None,
@@ -529,6 +530,7 @@ fn wearable_slot_places_an_unnamed_custom_attachable_on_the_body() {
     let (mut runtime, _) = pack_runtime(crown_pack());
     let body = player_body(&mut runtime);
     let crown = WornItem {
+        grip: assets::item::grip::builtin_item_grip("test:crown"),
         identifier: Arc::from("test:crown"),
         metadata: 0,
         damage: None,
@@ -558,6 +560,7 @@ fn first_person_session_icon_is_independent_of_avatar_bones_and_keeps_its_atlas(
     let (mut runtime, pages) = pack_runtime(crown_pack());
     let body = player_body(&mut runtime);
     let item = WornItem {
+        grip: assets::item::grip::builtin_item_grip("test:gem"),
         identifier: Arc::from("test:gem"),
         metadata: 0,
         damage: None,
@@ -569,7 +572,7 @@ fn first_person_session_icon_is_independent_of_avatar_bones_and_keeps_its_atlas(
     let staged = StagedSessionIcons::stage(Some(&items)).unwrap();
     let (_, locations) = pages.with_equipment_rasters(staged.rasters());
     runtime.set_session_items(Some(&items), Some(staged), locations);
-    let animation = client_world::ItemAnimationState::default();
+    let animation = actor_animation::ItemAnimationState::default();
     let first = runtime.first_person_item(&body, &item, animation).unwrap();
     assert!(first.camera_space);
     let mut moved = body.clone();
@@ -618,6 +621,14 @@ fn custom_items_hold_their_session_icon_with_the_component_grip() {
     let body = player_body(&mut runtime);
     let held = |identifier: &str| ActorEquipmentInput {
         main: Some(WornItem {
+            grip: if identifier == "test:blade" {
+                assets::item::grip::ItemGrip::Session {
+                    upright: true,
+                    mirrored_art: false,
+                }
+            } else {
+                assets::item::grip::ItemGrip::Unresolved
+            },
             identifier: Arc::from(identifier),
             metadata: 0,
             damage: None,
@@ -633,7 +644,7 @@ fn custom_items_hold_their_session_icon_with_the_component_grip() {
             .is_empty()
     );
     let blade = protocol::ItemComponents {
-        hand_equipped: true,
+        hand_equipped: Some(true),
         use_duration_ticks: Some(24),
         ..Default::default()
     };
@@ -670,6 +681,7 @@ fn custom_block_items_with_a_cube_sheet_are_held_as_blocks() {
     let (mut runtime, pages) = pack_runtime(crown_pack());
     let body = player_body(&mut runtime);
     let item = WornItem {
+        grip: assets::item::grip::builtin_item_grip("test:controller"),
         identifier: Arc::from("test:controller"),
         metadata: 0,
         damage: None,
@@ -695,7 +707,7 @@ fn custom_block_items_with_a_cube_sheet_are_held_as_blocks() {
     let staged = StagedSessionIcons::stage(Some(&items)).unwrap();
     let (_, locations) = pages.with_equipment_rasters(staged.rasters());
     runtime.set_session_items(Some(&items), Some(staged), locations);
-    let animation = client_world::ItemAnimationState::default();
+    let animation = actor_animation::ItemAnimationState::default();
     let first = runtime.first_person_item(&body, &item, animation).unwrap();
     let expected = super::first_person::block_pose(animation).unwrap();
     assert_eq!(
@@ -827,6 +839,7 @@ fn java_grips_ride_the_arm_and_skip_the_hurt_flash() {
     body.overlay_rgba8 = 0x6600_00ff;
     let input = ActorEquipmentInput {
         main: Some(WornItem {
+            grip: assets::item::grip::builtin_item_grip("test:gem"),
             identifier: Arc::from("test:gem"),
             metadata: 0,
             damage: None,
@@ -863,6 +876,7 @@ fn sprite_items_and_worn_attachables_skip_the_hurt_overlay() {
     let mut body = player_body(&mut runtime);
     body.overlay_rgba8 = 0x6600_00ff;
     let item = WornItem {
+        grip: assets::item::grip::builtin_item_grip("test:gem"),
         identifier: Arc::from("test:gem"),
         metadata: 0,
         damage: None,
@@ -891,6 +905,7 @@ fn sprite_items_and_worn_attachables_skip_the_hurt_overlay() {
         off: Some(item.clone()),
         armor: [
             Some(WornItem {
+                grip: assets::item::grip::builtin_item_grip("test:crown"),
                 identifier: Arc::from("test:crown"),
                 ..item.clone()
             }),
@@ -908,7 +923,7 @@ fn sprite_items_and_worn_attachables_skip_the_hurt_overlay() {
             .all(|layer| layer.submission.overlay_rgba8 == 0)
     );
     let main = runtime
-        .first_person_item(&body, &item, client_world::ItemAnimationState::default())
+        .first_person_item(&body, &item, actor_animation::ItemAnimationState::default())
         .unwrap();
     let off = runtime.first_person_offhand(&body, &item).unwrap();
     assert_eq!(main.presentation.submission.overlay_rgba8, 0);

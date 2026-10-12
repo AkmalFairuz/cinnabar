@@ -16,7 +16,7 @@ use bevy::{
     time::{Real, Time},
 };
 use chunk_pipeline::WorldStream;
-use protocol::{ActorKind, BedrockSession, WorldBootstrap, WorldEvent};
+use protocol::{ActorKind, WorldBootstrap, WorldEvent};
 use render_scene::{ActorRenderFrame, RuntimeStage, RuntimeStageProfiler};
 
 use {
@@ -127,7 +127,6 @@ fn write_varint(out: &mut Vec<u8>, mut value: u64) {
 
 /// Feeds one captured packet through the client's decoder into the stream.
 struct Replay {
-    session: BedrockSession,
     sequence: u64,
     local_position: [f32; 3],
     local_runtime_id: u64,
@@ -147,7 +146,7 @@ impl Replay {
         write_varint(&mut batch, (header.len() + body.len()) as u64);
         batch.extend_from_slice(&header);
         batch.extend_from_slice(body);
-        let packets = match protocol::decode_batch(batch.into(), &self.session) {
+        let packets = match protocol::decode_batch(batch.into()) {
             Ok(packets) => packets,
             Err(error) => {
                 self.reject(id, error.to_string());
@@ -335,7 +334,6 @@ fn build_world(
         stream.seed_property_defaults(defaults);
     }
     let mut replay = Replay {
-        session: BedrockSession { shield_item_id: 0 },
         sequence: 0,
         local_position: capture.bootstrap.player_position,
         local_runtime_id: capture.bootstrap.local_player_runtime_id,

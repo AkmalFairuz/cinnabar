@@ -43,7 +43,7 @@ fn the_animation_view_admits_everything_the_render_cull_draws() {
     assert!(drawn > 100 && held > 100, "drawn={drawn} held={held}");
 }
 
-use client_world::HandPhase;
+use actor_animation::HandPhase;
 
 // The swing wraps forward from its last tick to rest, and an eat use counts from its first
 // using tick only while the rig reports the use.
@@ -528,4 +528,31 @@ fn session_pack_glint_replaces_the_startup_glint_until_disconnect() {
     );
     assert!(restored.is_none());
     assert_eq!(glint(scene.frame().artwork_pages()), [1, 2, 3, 255]);
+}
+
+/// An active HitColor module cannot overwrite the Reach overlay on an undamaged target.
+#[test]
+fn reach_and_hurt_colors_follow_actual_damage_independently() {
+    let style = super::ActorPresentationStyle {
+        hurt_color: Some([1., 0., 0., 0.4]),
+        hurt_armor_color: Some([0.5, 0., 0., 0.4]),
+        attackable_color: Some([0., 1., 0., 0.3]),
+        attackable_actor: Some(7),
+    };
+    assert_eq!(
+        super::cosmetic_overlay(&style, false, false, true, true),
+        style.attackable_color
+    );
+    assert_eq!(
+        super::cosmetic_overlay(&style, true, false, true, true),
+        style.hurt_color
+    );
+    assert_eq!(
+        super::cosmetic_overlay(&style, true, true, true, true),
+        style.hurt_armor_color
+    );
+    assert_eq!(
+        super::cosmetic_overlay(&style, false, false, true, false),
+        None
+    );
 }

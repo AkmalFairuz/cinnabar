@@ -47,6 +47,7 @@ fn opaque_runtime_assets() -> &'static RuntimeAssets {
                     model_template: NO_MODEL_TEMPLATE,
                     animation: NO_ANIMATION,
                     variant: 0,
+                    destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
                 },
                 BlockVisual {
                     faces: [1; 6],
@@ -57,6 +58,7 @@ fn opaque_runtime_assets() -> &'static RuntimeAssets {
                     model_template: NO_MODEL_TEMPLATE,
                     animation: NO_ANIMATION,
                     variant: 0,
+                    destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
                 },
             ]
             .into_boxed_slice(),

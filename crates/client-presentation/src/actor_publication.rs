@@ -65,10 +65,10 @@ pub struct ActorFrameInput {
     pub predicted_eye: Option<[f32; 3]>,
     pub predicted_feet: Option<[f32; 3]>,
     pub local_equipment: crate::presentation::equipment::ActorEquipmentInput,
-    pub swing_progress: Option<client_world::LocalSwingProgress>,
+    pub swing_progress: Option<actor_animation::LocalSwingProgress>,
     pub renders_game: bool,
     pub hide_hand: bool,
-    pub custom_emote: Option<(client_world::CustomEmote, f64)>,
+    pub custom_emote: Option<(actor_animation::CustomEmote, f64)>,
 }
 
 /// Presentation-owned resources that determine the avatar's current view.
@@ -80,6 +80,39 @@ pub struct ActorPresentationState<'w, 's> {
     server_camera: Option<Res<'w, crate::camera::ServerCameraView>>,
     view: Res<'w, LocalViewPose>,
     camera: Query<'w, 's, (&'static Transform, &'static Projection), With<FlyCamera>>,
+}
+
+/// Optional validated cosmetic tint of already active native actor damage overlays.
+#[derive(Resource, Default)]
+pub struct ActorPresentationStyle {
+    pub hurt_color: Option<[f32; 4]>,
+    pub hurt_armor_color: Option<[f32; 4]>,
+    /// Native admitted ray target; never a guest-provided actor identity.
+    pub attackable_actor: Option<u64>,
+    pub attackable_color: Option<[f32; 4]>,
+}
+
+/// Selects cosmetic color without treating a reach overlay as evidence of damage.
+fn cosmetic_overlay(
+    style: &ActorPresentationStyle,
+    hurt: bool,
+    armor: bool,
+    native_overlay: bool,
+    attackable: bool,
+) -> Option<[f32; 4]> {
+    if hurt {
+        if armor {
+            style.hurt_armor_color
+        } else if native_overlay {
+            style.hurt_color
+        } else {
+            None
+        }
+    } else if attackable {
+        style.attackable_color
+    } else {
+        None
+    }
 }
 
 /// The frame fraction the actor rigs interpolate at, for overlays anchored to actors.
@@ -196,6 +229,7 @@ fn apply_session_geometry(
 #[derive(SystemParam)]
 pub struct ActorFramePublication<'w, 's> {
     time: Res<'w, Time<Real>>,
+    actor_style: Option<Res<'w, ActorPresentationStyle>>,
     state: ResMut<'w, ActorFrameState>,
     scene: ResMut<'w, ActorRenderScene>,
     prepared: ResMut<'w, PreparedActorPublication>,
@@ -214,12 +248,13 @@ pub struct ActorFramePublication<'w, 's> {
 /// Builds final actor and hand poses after admission, without advancing remote actor ticks.
 pub fn prepare_actor_render_frame(
     mut client_world: ActorWorld<'_>,
-    swing_progress: Option<client_world::LocalSwingProgress>,
+    swing_progress: Option<actor_animation::LocalSwingProgress>,
     hides_box: impl Fn(&WorldStream, [f32; 3], [f32; 3], [f32; 3]) -> bool,
     params: ActorFramePublication,
 ) {
     let ActorFramePublication {
         time,
+        actor_style,
         mut state,
         mut scene,
         mut prepared,
@@ -308,7 +343,7 @@ pub fn prepare_actor_render_frame(
                 .authority()
                 .actor_rig(stream.local_player_runtime_id())?;
             let (emote, elapsed) = input.custom_emote?;
-            client_world::sample_custom_emote(&rig, emote, elapsed, elapsed)
+            actor_animation::sample_custom_emote(&rig, emote, elapsed, elapsed)
         })
         .flatten();
     let mut native_body_sampled = false;
@@ -733,6 +768,35 @@ pub fn prepare_actor_render_frame(
     {
         scene.configure_artwork(pages);
     }
+    if let Some(style) = actor_style.as_ref() {
+        for submission in &mut batch.submissions {
+            let armor = (3..=6).contains(&submission.input.identity.layer);
+            let hurt = client_world.stream.as_ref().is_some_and(|stream| {
+                stream
+                    .authority()
+                    .actor(submission.input.identity.runtime_id)
+                    .is_some_and(|actor| actor.hurt_overlay_active())
+            });
+            let attackable = style.attackable_actor == Some(submission.input.identity.runtime_id)
+                && client_world.stream.as_ref().is_some_and(|stream| {
+                    stream
+                        .authority()
+                        .actor(submission.input.identity.runtime_id)
+                        .is_some_and(|actor| {
+                            matches!(actor.kind, protocol::ActorKind::Player { .. })
+                        })
+                });
+            if let Some(color) = cosmetic_overlay(
+                style,
+                hurt,
+                armor,
+                submission.overlay_rgba8 != 0,
+                attackable,
+            ) {
+                submission.overlay_rgba8 = render_model::pack_overlay_rgba8(color);
+            }
+        }
+    }
     // Hiding skin layers keeps armor and held items visible.
     if let Some(stream) = client_world.stream.as_ref() {
         for submission in &mut batch.submissions {
@@ -855,7 +919,7 @@ fn actor_camera_rotation(rotation: bevy::math::Quat) -> [f32; 2] {
 fn animation_view(
     transform: &bevy::prelude::Transform,
     projection: &Projection,
-) -> Option<client_world::ActorAnimationView> {
+) -> Option<actor_animation::ActorAnimationView> {
     let Projection::Perspective(perspective) = projection else {
         return None;
     };
@@ -877,7 +941,7 @@ fn animation_view(
         .iter()
         .flatten()
         .all(|value| value.is_finite())
-        .then(|| client_world::ActorAnimationView {
+        .then(|| actor_animation::ActorAnimationView {
             planes,
             camera: transform.translation.to_array(),
             player_distance: MAX_ACTOR_RENDER_DISTANCE_BLOCKS,

@@ -2,6 +2,7 @@
 members = [
     "app",
     "crates/acceptance",
+    "crates/actor-animation",
     "crates/diagnostics",
     "crates/asset-compiler",
     "crates/assets",
@@ -59,6 +60,7 @@ members = [
     "tools/architecture",
     "tools/bedrock-replay",
     "tools/devtool",
+    "tools/workspace-declarations",
     "tools/dist",
     "tools/jsonui-editor",
     "tools/jsonui-mcp",

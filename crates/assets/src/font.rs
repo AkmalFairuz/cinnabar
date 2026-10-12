@@ -3,10 +3,15 @@ use std::{collections::BTreeMap, str, sync::Arc};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+mod bundle;
 mod carrier;
+pub use bundle::{
+    FONT_FACE_BUNDLE_MAGIC, FONT_FACE_BUNDLE_SCHEMA, FontFaceRaster, decode_font_face_bundle,
+    encode_font_face_bundle,
+};
 pub use carrier::encode_font_catalog;
 use carrier::{
-    array_at, decode_glyphs, decode_pages, invalid_catalog, validate_envelope,
+    array_at, decode_glyphs, decode_pages, decoded_extent, invalid_catalog, validate_envelope,
     validate_glyph_records, validate_page_offsets,
 };
 mod fallback;
@@ -60,8 +65,8 @@ pub struct FontTexturePage {
 /// A page's texels: RGBA8, or one coverage byte per texel when every visible texel is white.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FontPixels {
-    Rgba8(Box<[u8]>),
-    Coverage(Box<[u8]>),
+    Rgba8(Arc<[u8]>),
+    Coverage(Arc<[u8]>),
 }
 
 impl FontPixels {

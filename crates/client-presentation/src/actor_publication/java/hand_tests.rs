@@ -159,6 +159,7 @@ fn source_for_use(
     );
     let input = ActorEquipmentInput {
         main: identifier.map(|identifier| WornItem {
+            grip: assets::item::grip::builtin_item_grip(identifier),
             identifier: identifier.into(),
             metadata: 0,
             damage: None,
@@ -184,7 +185,7 @@ fn source_for_use(
             equipment_input: &input,
             owner_equipment: &input,
             consume_ticks: None,
-            item_animation: Some(client_world::AttachableAnimationInput {
+            item_animation: Some(actor_animation::AttachableAnimationInput {
                 first_person: true,
                 ..Default::default()
             }),

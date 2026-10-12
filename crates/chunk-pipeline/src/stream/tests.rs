@@ -132,6 +132,7 @@ fn non_default_air_runtime_assets() -> RuntimeAssets {
         model_template: NO_MODEL_TEMPLATE,
         animation: NO_ANIMATION,
         variant: 0,
+        destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
     };
     let air = BlockVisual {
         support: assets::VisualSupport::Exact,
@@ -142,6 +143,7 @@ fn non_default_air_runtime_assets() -> RuntimeAssets {
         model_template: NO_MODEL_TEMPLATE,
         animation: NO_ANIMATION,
         variant: 0,
+        destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
     };
     let mips = [16_u32, 8, 4, 2, 1]
         .map(|size| TextureMip {
@@ -219,6 +221,7 @@ fn camera_medium_assets() -> RuntimeAssets {
         model_template: NO_MODEL_TEMPLATE,
         animation: NO_ANIMATION,
         variant,
+        destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
     };
     let visuals = vec![
         visual(
@@ -418,6 +421,7 @@ fn block_entity_visual_assets() -> RuntimeAssets {
         model_template: NO_MODEL_TEMPLATE,
         animation: NO_ANIMATION,
         variant: 0,
+        destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
     };
     let compiled = CompiledAssets {
         visuals: vec![visual; 15_692].into_boxed_slice(),
@@ -692,6 +696,7 @@ fn cave_test_assets() -> RuntimeAssets {
                 model_template: NO_MODEL_TEMPLATE,
                 animation: NO_ANIMATION,
                 variant: 0,
+                destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
             },
             BlockVisual {
                 faces: [1; 6],
@@ -702,6 +707,7 @@ fn cave_test_assets() -> RuntimeAssets {
                 model_template: NO_MODEL_TEMPLATE,
                 animation: NO_ANIMATION,
                 variant: 0,
+                destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
             },
             BlockVisual {
                 faces: [2; 6],
@@ -712,6 +718,7 @@ fn cave_test_assets() -> RuntimeAssets {
                 model_template: NO_MODEL_TEMPLATE,
                 animation: NO_ANIMATION,
                 variant: 0,
+                destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
             },
         ]
         .into_boxed_slice(),
