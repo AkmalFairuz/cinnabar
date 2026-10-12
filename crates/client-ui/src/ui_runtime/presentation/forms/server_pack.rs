@@ -44,13 +44,13 @@ impl ServerUiPack {
                 .catalog()
                 .layer(base, &self.ui_layers),
         );
-        let textures = super::hud::prepared::prepare(&catalog);
+        let textures = super::hud::prepare(&catalog);
         if let Some(view) = &self.view {
             ui_engine::prepared::keep_textures(&catalog, PrereadTextures::read(view, &textures));
         }
         prepared.screen_settings = Some(Arc::new(PreparedScreenSettings::new(
             catalog.clone(),
-            super::menu_screens::retail_context(),
+            ui_screens::menu_screens::retail_context(),
         )));
         prepared.catalog = Some(catalog);
         Arc::new(prepared)

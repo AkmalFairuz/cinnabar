@@ -41,7 +41,7 @@ pub fn settings_view() -> MenuView {
 
 /// Resolves a settings selector using the production section map.
 pub fn settings_section_index(variable: &str) -> Option<u8> {
-    super::menu_screens::SETTINGS_SECTIONS
+    launcher::menu::settings_sections::SETTINGS_SECTIONS
         .iter()
         .find_map(|(name, index)| (*name == variable).then_some(*index))
 }
@@ -78,7 +78,7 @@ pub fn snapshot_menu_vanilla(
     view: &MenuView,
     name: &str,
 ) {
-    let Some(carrier) = super::pack_harness::carrier() else {
+    let Some(carrier) = ui_engine::test_support::carrier() else {
         return;
     };
     let files = carrier.ui_files();
