@@ -12,7 +12,7 @@ crate-type = ["cdylib", "rlib"]
 # Native builds compile an empty crate, so workspace builds never pull the browser stack.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 assets = { path = "../../crates/assets" }
-bedrock-client = { path = "../../app", default-features = false }
+cinnabar = { path = "../../app", default-features = false }
 bridge = { path = "../../crates/bridge" }
 console_error_panic_hook = "0.1.7"
 js-sys.workspace = true

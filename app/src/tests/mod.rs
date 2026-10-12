@@ -130,7 +130,7 @@ use {
         orient_acceptance_camera, orient_mutation_camera,
     },
     acceptance::{
-        AcceptanceExitDecision, Phase3TerminalDrainDecision, TRANSPARENT_PRESENTATION_EXIT_GRACE,
+        AcceptanceExitDecision, MovementTerminalDrainDecision, TRANSPARENT_PRESENTATION_EXIT_GRACE,
     },
 };
 
@@ -314,6 +314,7 @@ mod camera_controls;
 mod cohort_epoch;
 mod core;
 
+mod actor_presentation;
 mod crafting_authority_schedule;
 mod finish;
 #[cfg(feature = "reports")]
@@ -328,10 +329,9 @@ mod inventory_schedule;
 mod inventory_secondary_input;
 mod menu_scene;
 mod pack_entity_metadata;
-mod phase2_evidence;
-mod phase4_presentation;
 mod player_animation;
 mod publication;
+mod publication_evidence;
 mod runtime_metrics;
 
 mod teleport;

@@ -1,5 +1,6 @@
 //! Startup carrier loading and required registry verification.
 mod timing;
+pub(super) use timing::install_first_frame_log;
 use timing::LoadTimes;
 
 use super::{PHYSICS_REGISTRY_GENERATION_GUIDANCE, PHYSICS_REGISTRY_SHA256};
@@ -14,6 +15,7 @@ use assets::{
     RuntimeEquipmentCatalog, RuntimeParticleAssets, RuntimeUiAssets,
 };
 use client_interaction::movement::PhysicsCollisionRegistries;
+use client_ui::ui_runtime::presentation::PreparedJsonUi;
 use launcher_host::session_cleanup::ScopedSessionDirectory;
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path, sync::Arc};
@@ -29,9 +31,39 @@ pub(super) struct StartupCarriers {
     pub(super) audio: Result<AudioCarriers>,
     pub(super) block_entities: Option<Arc<RuntimeBlockEntityAssets>>,
     pub(super) particles: Option<Arc<RuntimeParticleAssets>>,
-    pub(super) ui: Result<Arc<RuntimeUiAssets>>,
+    pub(super) ui: Result<PreparingJsonUi>,
     pub(super) weather: render_scene::WeatherTextureAssets,
     pub(super) collision: Result<PhysicsCollisionRegistries>,
+}
+
+/// The validated UI carrier's catalog, parsing on its own thread while startup continues; a
+/// browser, which cannot start threads, parses it in place.
+pub(super) enum PreparingJsonUi {
+    Thread(std::thread::JoinHandle<Result<PreparedJsonUi, String>>),
+    Ready(Result<PreparedJsonUi, String>),
+}
+
+impl PreparingJsonUi {
+    fn start(assets: Arc<RuntimeUiAssets>) -> Result<Self> {
+        if cfg!(target_arch = "wasm32") {
+            return Ok(Self::Ready(PreparedJsonUi::new(assets)));
+        }
+        std::thread::Builder::new()
+            .name("json-ui-catalog".to_owned())
+            .spawn(move || PreparedJsonUi::new(assets))
+            .map(Self::Thread)
+            .context("start the JSON-UI catalog thread")
+    }
+
+    /// The parsed catalog, waiting for its thread and re-raising a panic from it.
+    pub(super) fn join(self) -> Result<PreparedJsonUi, String> {
+        match self {
+            Self::Thread(thread) => thread
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+            Self::Ready(prepared) => prepared,
+        }
+    }
 }
 
 /// The carriers bound to the decoded entity catalog.
@@ -93,9 +125,11 @@ fn load_with(
             })
         });
         let ui = start(scope, || {
-            times.time("ui", || {
-                client_ui::ui_runtime::json_ui_assets::require_ui_assets(world)
-            })
+            times
+                .time("ui", || {
+                    client_ui::ui_runtime::json_ui_assets::require_ui_assets(world)
+                })
+                .and_then(PreparingJsonUi::start)
         });
         let weather = start(scope, || {
             times.time("weather", || {
@@ -214,7 +248,7 @@ fn load_collision_registries(
     // and this physics binding derive their protocol from it, so a partially flipped carrier set
     // fails closed instead of aliasing live block identities.
     let expected_protocol = assets::active_content_registry_protocol();
-    assets::pinned_block_presentation_states();
+    assets::block_presentation_state::pinned_block_presentation_states();
     let preg = read_verified_physics_registry(
         physics_registry,
         PHYSICS_REGISTRY_SHA256,
@@ -400,17 +434,17 @@ mod tests {
             vec!["--transparent-witness-request", "witness.json"],
             vec!["--model-witness-request", "witness.json"],
             vec![
-                "--phase3-evidence-target",
+                "--movement-evidence-target",
                 "Bds",
                 "--acceptance-seconds",
                 "1",
                 "--metrics-out",
                 "metrics.json",
-                "--phase3-candidate-physics",
+                "--movement-candidate-physics",
             ],
         ] {
             let ParseOutcome::Run(args) =
-                ClientArgs::parse_from(std::iter::once("bedrock-client").chain(flags)).unwrap()
+                ClientArgs::parse_from(std::iter::once("cinnabar").chain(flags)).unwrap()
             else {
                 panic!("expected runtime arguments")
             };

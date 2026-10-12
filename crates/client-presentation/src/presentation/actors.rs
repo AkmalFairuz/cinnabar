@@ -1,3 +1,4 @@
+use render_api::PoseGeneration;
 use std::{collections::HashMap, sync::Arc};
 
 use actor_animation::ActorRigSnapshot;
@@ -18,6 +19,8 @@ use {
     render_scene::{ActorRenderFrame, ActorRenderScene},
 };
 
+mod locator;
+pub use locator::actor_emitter_transform;
 mod admission;
 pub use admission::within_actor_candidate_cube;
 pub(crate) use admission::{actor_within_render_distance, sample_candidate_scale};
@@ -58,7 +61,7 @@ pub fn update_actor_rig_scene(
 ) -> &ActorRenderFrame {
     // The app adapter has already applied the renderer's exact culling helper
     // to remotes before enforcing capacity. Passing no second cull view keeps
-    // Phase 3's visible local reservation unconditional in both third-person
+    // the movement-owned visible local reservation unconditional in both third-person
     // modes while the render-owned builder still validates every other field.
     scene.update_rigs_with_artwork(
         partial_tick,
@@ -71,6 +74,7 @@ pub fn update_actor_rig_scene(
 
 /// Checks distance and frustum bounds before building a rig's presentation.
 /// Always-depth layers survive terrain occlusion, using the draw frame's cached layers when available.
+/// Controllers that can replace the base mesh bypass terrain proofs using its bounds.
 pub fn rig_may_be_visible(
     rig: &ActorRigSnapshot<'_>,
     actor: &ActorSnapshot,
@@ -97,6 +101,13 @@ pub fn rig_may_be_visible(
     let bounds = rig.culling_bounds();
     if !actor_bounds_are_visible(feet, scale, bounds, Some(view)) {
         return false;
+    }
+    if rig.render.iter().any(|layer| layer.geometry.is_some())
+        || frame
+            .as_ref()
+            .is_some_and(|frame| frame.may_replace_body_geometry(rig.actor.runtime_id))
+    {
+        return true;
     }
     let (low, high) = bounds.at(feet, scale);
     !occluded(low, high)
@@ -282,7 +293,7 @@ fn tick_presentation(
                         source_tick: None,
                         movement_revision: 0,
                         // Tick zero is a valid initial pose; identity generations reserve zero.
-                        pose_generation: rig.completed_tick.saturating_add(1),
+                        pose_generation: PoseGeneration::new(rig.completed_tick.saturating_add(1)),
                         layer: render_model::ACTOR_LAYER_BODY,
                     },
                     rig: EntityRigId(rig.rig.0),
@@ -388,14 +399,14 @@ pub fn local_diagnostic_presentation(
     actor_session_id: u64,
     dimension: i32,
     runtime_id: u64,
-    pose_generation: u64,
+    pose_generation: PoseGeneration,
     position: [f32; 3],
     yaw_degrees: f32,
     pitch_degrees: f32,
 ) -> Option<ActorRigPresentation> {
     if actor_session_id == 0
         || runtime_id == 0
-        || pose_generation == 0
+        || pose_generation.get() == 0
         || position.iter().any(|value| !value.is_finite())
         || !yaw_degrees.is_finite()
         || !pitch_degrees.is_finite()
@@ -427,16 +438,16 @@ pub fn local_diagnostic_presentation(
                     dimension,
                     runtime_id,
                     spawn_revision: actor_session_id,
-                    ingress_sequence: pose_generation,
+                    ingress_sequence: pose_generation.get(),
                     source_tick: None,
-                    movement_revision: pose_generation,
+                    movement_revision: pose_generation.get(),
                     pose_generation,
                     layer: render_model::ACTOR_LAYER_BODY,
                 },
                 rig: EntityRigId(u32::MAX),
                 previous_bones: Arc::from(bones),
                 current_bones: Arc::from(bones),
-                completed_tick: pose_generation,
+                completed_tick: pose_generation.get(),
                 reset_generation: actor_session_id,
             },
             // Same facing convention as the driven rig so the pre-rig fallback and the rig agree.
@@ -827,13 +838,31 @@ mod death_tests {
         let old_feet = [1.0, 2.0, 3.0];
         let new_feet = [4.0, 64.0, 2.0];
         let axes = [2.0, 3.0, 4.0];
-        let mut canonical = local_diagnostic_presentation(7, 0, 7, 5, old_feet, 30.0, 0.0).unwrap();
+        let mut canonical = local_diagnostic_presentation(
+            7,
+            0,
+            7,
+            render_api::PoseGeneration::new(5),
+            old_feet,
+            30.0,
+            0.0,
+        )
+        .unwrap();
         canonical.head_over_body = 10.0;
         canonical.submission.world_from_actor = death_tilted(
             scaled_axes(canonical.submission.world_from_actor, axes),
             Some(0.4),
         );
-        let diagnostic = local_diagnostic_presentation(7, 0, 7, 5, new_feet, 90.0, 0.0).unwrap();
+        let diagnostic = local_diagnostic_presentation(
+            7,
+            0,
+            7,
+            render_api::PoseGeneration::new(5),
+            new_feet,
+            90.0,
+            0.0,
+        )
+        .unwrap();
         let local =
             local_actor_presentation_for_visibility(7, 7, Some(canonical), Some(diagnostic), 90.0)
                 .unwrap();
@@ -858,9 +887,16 @@ mod skin_dedupe_tests {
     use super::*;
 
     fn remote(runtime_id: u64, skin: SkinRgba8) -> ActorRigPresentation {
-        let mut presentation =
-            local_diagnostic_presentation(7, 0, runtime_id, 5, [0.0, 64.0, 0.0], 0.0, 0.0)
-                .expect("finite carrier converts");
+        let mut presentation = local_diagnostic_presentation(
+            7,
+            0,
+            runtime_id,
+            render_api::PoseGeneration::new(5),
+            [0.0, 64.0, 0.0],
+            0.0,
+            0.0,
+        )
+        .expect("finite carrier converts");
         presentation.skin_rgba8 = Some(skin);
         presentation
     }
@@ -904,8 +940,16 @@ mod layer_pass_tests {
             false,
             None,
             (1..=3).map(|runtime_id| {
-                local_diagnostic_presentation(7, 0, runtime_id, 5, [0.0, 64.0, 0.0], 0.0, 0.0)
-                    .expect("finite carrier converts")
+                local_diagnostic_presentation(
+                    7,
+                    0,
+                    runtime_id,
+                    render_api::PoseGeneration::new(5),
+                    [0.0, 64.0, 0.0],
+                    0.0,
+                    0.0,
+                )
+                .expect("finite carrier converts")
             }),
         );
         let mut visited = Vec::new();

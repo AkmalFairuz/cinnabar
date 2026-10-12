@@ -18,13 +18,15 @@ mod nametag;
 pub mod panorama;
 mod presentation;
 pub mod primitive_shapes;
+pub mod terrain_units;
 mod ui;
 mod ui_textures;
 mod visibility;
+pub mod visibility_bounds;
 
 pub use actor::{
-    ACTOR_RIG_VERTEX_WORDS, ActorRigGeometry, ActorRigGeometryError, ActorRigSurface,
-    ActorRigVertex, ActorSkinPixels, ActorVertex, DEFAULT_PLAYER_SKIN_PATH,
+    ACTOR_RIG_VERTEX_WORDS, ActorEmitterTransform, ActorRigGeometry, ActorRigGeometryError,
+    ActorRigSurface, ActorRigVertex, ActorSkinPixels, ActorVertex, DEFAULT_PLAYER_SKIN_PATH,
     DEFAULT_SKIN_PROVENANCE, DIAGNOSTIC_RIG_ID, EntityRigId, FrameSlotRecency,
     MAX_ACTOR_CATALOG_VERTEX_BYTES, MAX_ACTOR_CATALOG_VERTICES, MAX_ACTOR_RIG_VERTICES,
     MAX_RENDER_BONES_PER_ACTOR, MAX_RENDERED_PLAYERS, ONE_SIDED_BACK_UV, PLAYER_SKIN_BUDGET_BYTES,
@@ -37,8 +39,8 @@ pub use actor::{
     is_equipment_rig_id, is_layer_geometry_rig_id, is_pack_equipment_rig_id, is_pack_rig_id,
     item_mesh_rig_id, layer_geometries, layer_geometry_rig_id, normalize_actor_skin,
     pack_equipment_rig_id, pack_geometries, pack_rig_id, prepare_actor_skin_cached,
-    resolve_geometry_bones, skin_geometry, skin_rig_id, standard_biped_overlay_vertices,
-    standard_biped_vertices,
+    resolve_geometry_bones, sampled_locator_transform, skin_geometry, skin_rig_id,
+    standard_biped_overlay_vertices, standard_biped_vertices,
 };
 pub use chunk_metrics::{
     ModelWorkloadCount, ModelWorkloadMetricsSnapshot, TransparentSortMetricsSnapshot,
@@ -57,8 +59,9 @@ pub use frame_pacing::{
 pub use item_geometry::{extruded_sprite_vertices, held_sprite_vertices, textured_cube_vertices};
 pub use nametag::{
     MAX_NAMETAG_RECORDS, NAMETAG_ACOS_CUBIC, NAMETAG_ACOS_LINEAR, NAMETAG_ATLAS_SIDE,
-    NAMETAG_BLOCKS_PER_FONT_PIXEL, NAMETAG_HORIZONTAL_ZERO, NAMETAG_TEXT_REVERSE_Z_BIAS,
-    NametagAtlasRect, NametagRecord, NametagScene,
+    NAMETAG_BLOCKS_PER_FONT_PIXEL, NAMETAG_HORIZONTAL_ZERO, NAMETAG_LINE_PITCH_PX,
+    NAMETAG_TEXT_REVERSE_Z_BIAS, NametagAtlasRect, NametagRecord, NametagScene,
+    nametag_line_backgrounds, nametag_line_left,
 };
 pub use panorama::{MAX_PANORAMA_FACE_SIDE, PanoramaFaces, PanoramaView};
 pub use presentation::{
@@ -165,7 +168,9 @@ pub use block_entity::DragonDeathModel;
 pub use block_entity::SPAWNER_MOBS;
 pub use block_entity::ShulkerModel;
 pub use block_entity::SpawnerModel;
-pub use block_entity::{AtlasRect, BlockEntityAtlas, TEXT_CELL, TEXT_SLOT_COUNT, TextureRef};
+pub use block_entity::{
+    AtlasRect, BlockEntityAtlas, MAP_CELL, TEXT_CELL, TEXT_SLOT_COUNT, TextureRef,
+};
 pub use block_entity::{
     BLOCK_ENTITY_REACH_BLOCKS, BlockEntityAtlasImage, BlockEntityFrame, BlockEntityKind,
     BlockEntityLight, BlockEntityScene, BlockEntitySubmission, CrackInstance, SceneClock,
@@ -179,6 +184,7 @@ pub use block_entity::{
 pub use block_entity::{BannerLayer, BannerModel, BannerMount};
 pub use block_entity::{BedModel, bed_color};
 pub use block_entity::{BellAttachment, BellModel, swing_degrees};
+pub use block_entity::{BlockEntityArtworkPreparer, PreparedBlockEntityArtwork};
 pub use block_entity::{ChestModel, ChestPair, ChestVariant, CopperAge, lid_angle_radians};
 pub use block_entity::{CrackQuad, CrackShape, crack_shape_from_template, crack_texture_name};
 pub use block_entity::{DecoratedPotModel, sherd_pattern};

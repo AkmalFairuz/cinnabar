@@ -1,13 +1,14 @@
 //! Actor tick state and frame-rate animation publication.
 
 use super::*;
+use simulation_clock::identity::{PositionAuthorityGeneration, SessionGeneration};
 
 impl ActorStore {
     /// Java torso ticks follow this local simulation identity rather than the remote actor clock.
     pub(crate) fn set_local_motion_authority(
         &mut self,
         runtime_id: u64,
-        authority: Option<(u64, u64)>,
+        authority: Option<(SessionGeneration, PositionAuthorityGeneration)>,
     ) {
         self.animation
             .set_local_motion_authority(runtime_id, authority);
@@ -17,7 +18,7 @@ impl ActorStore {
     pub(crate) fn sync_local_swing_motion(
         &mut self,
         runtime_id: u64,
-        authority: (u64, u64),
+        authority: (SessionGeneration, PositionAuthorityGeneration),
         samples: impl IntoIterator<Item = actor_animation::LocalSwingMotionSample>,
     ) {
         self.local_view_dirty |= self
@@ -292,7 +293,7 @@ impl ActorStore {
                     java_swing_ticks: if is_local {
                         local_java_swing_ticks
                     } else {
-                        actor_animation::ACTOR_SWING_TICKS
+                        actor.status.swing_effects.ticks()
                     },
                     main_hand_slot: if is_local {
                         local_main_slot

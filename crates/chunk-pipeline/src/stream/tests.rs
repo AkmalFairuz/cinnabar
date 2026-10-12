@@ -123,6 +123,7 @@ mod world_clocks;
 
 fn non_default_air_runtime_assets() -> RuntimeAssets {
     let cube = BlockVisual {
+        native_material: assets::native_material::NativeMaterialFacts::Unresolved,
         support: assets::VisualSupport::Exact,
         faces: [0; 6],
         flags: BlockFlags::CUBE_GEOMETRY | BlockFlags::OCCLUDES_FULL_FACE,
@@ -134,6 +135,7 @@ fn non_default_air_runtime_assets() -> RuntimeAssets {
         destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
     };
     let air = BlockVisual {
+        native_material: assets::native_material::NativeMaterialFacts::Unresolved,
         support: assets::VisualSupport::Exact,
         faces: [0; 6],
         flags: BlockFlags::AIR,
@@ -206,6 +208,7 @@ fn uniform_sub_chunk(runtime_id: u32) -> SubChunk {
 
 fn camera_medium_assets() -> RuntimeAssets {
     let visual = |kind, role, faces, variant| BlockVisual {
+        native_material: assets::native_material::NativeMaterialFacts::Unresolved,
         support: assets::VisualSupport::Exact,
         faces,
         flags: if kind == VisualKind::Invisible {
@@ -412,6 +415,7 @@ fn idless_note_block_entity_nbt(position: [i32; 3], note: u8, powered: u8, marke
 
 fn block_entity_visual_assets() -> RuntimeAssets {
     let visual = BlockVisual {
+        native_material: assets::native_material::NativeMaterialFacts::Unresolved,
         support: assets::VisualSupport::Exact,
         faces: [0; 6],
         flags: BlockFlags::CUBE_GEOMETRY | BlockFlags::OCCLUDES_FULL_FACE,
@@ -687,6 +691,7 @@ fn cave_test_assets() -> RuntimeAssets {
     let compiled = CompiledAssets {
         visuals: vec![
             BlockVisual {
+                native_material: assets::native_material::NativeMaterialFacts::Unresolved,
                 faces: [0; 6],
                 flags: BlockFlags::AIR,
                 kind: VisualKind::Invisible,
@@ -698,6 +703,7 @@ fn cave_test_assets() -> RuntimeAssets {
                 destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
             },
             BlockVisual {
+                native_material: assets::native_material::NativeMaterialFacts::Unresolved,
                 faces: [1; 6],
                 flags: BlockFlags::CUBE_GEOMETRY | BlockFlags::LEAF_MODEL,
                 kind: VisualKind::Cube,
@@ -709,6 +715,7 @@ fn cave_test_assets() -> RuntimeAssets {
                 destroy: assets::compiled::block_destroy::BlockDestroyFacts::Unresolved,
             },
             BlockVisual {
+                native_material: assets::native_material::NativeMaterialFacts::Unresolved,
                 faces: [2; 6],
                 flags: BlockFlags::CUBE_GEOMETRY | BlockFlags::OCCLUDES_FULL_FACE,
                 kind: VisualKind::Cube,
@@ -974,6 +981,7 @@ mod cases_10;
 mod cases_11;
 mod cases_12;
 mod cohort_progress;
+mod entity_occlusion;
 mod forced_remesh;
 mod inbound_lanes;
 mod inline_cohort;
