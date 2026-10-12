@@ -7937,3 +7937,9 @@ item names do not select bow or crossbow use frames. Unsupported charged project
 has no admitted drawing frame. Complete native item/stack metadata coverage and stack-NBT
 cache acceptance remain incomplete. Authored and session use cooldown fractions share the
 provisional component-precision conversion; native cooldown initialization is unverified.
+
+## Loom banner previews
+
+JSON-UI banner controls draw ordered front-cloth layers from the active artwork. Loom pattern choices and results publish bounded pattern and dye bindings, including existing banner layers.
+
+Incomplete parity: recipe eligibility and exact pattern-choice styling remain open.

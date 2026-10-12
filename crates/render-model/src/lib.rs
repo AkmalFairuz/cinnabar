@@ -176,7 +176,7 @@ pub use block_entity::{
 pub use block_entity::{
     BLOCK_SELECTION_VERTICES_PER_EDGE, BlockSelectionFrame, BlockSelectionTarget,
 };
-pub use block_entity::{BannerLayer, BannerModel, BannerMount, MAX_BANNER_LAYERS, pattern_texture};
+pub use block_entity::{BannerLayer, BannerModel, BannerMount};
 pub use block_entity::{BedModel, bed_color};
 pub use block_entity::{BellAttachment, BellModel, swing_degrees};
 pub use block_entity::{ChestModel, ChestPair, ChestVariant, CopperAge, lid_angle_radians};
