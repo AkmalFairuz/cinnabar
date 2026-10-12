@@ -1,7 +1,8 @@
 //! The host's texture sources for the engine's atlas: the installed vanilla pack on disk, the
 //! remote image cache, and the clock and threads its image work runs on.
 
-use std::{io::Read, path::PathBuf, sync::Arc, time::Instant};
+use std::{io::Read, path::PathBuf, sync::Arc};
+use web_time::Instant;
 
 use launcher_host::remote_images::{RemoteImages, RemoteState};
 use ui_engine::sources::{ImageWork, LocalPack, RemoteImage, RemoteSource};
@@ -49,12 +50,13 @@ pub(super) fn downloads() -> Arc<dyn RemoteSource> {
     Arc::new(Downloads(RemoteImages::default()))
 }
 
-/// Background workers, with inline decodes bounded on the monotonic clock.
+/// Background workers, with inline decodes bounded on the monotonic clock; a browser, which cannot
+/// start threads, decodes every image inline.
 pub(super) fn image_work() -> ImageWork {
     let origin = Instant::now();
     ImageWork {
         clock: Some(Arc::new(move || origin.elapsed())),
-        workers: true,
+        workers: !cfg!(target_arch = "wasm32"),
     }
 }
 
