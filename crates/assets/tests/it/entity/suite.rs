@@ -31,6 +31,7 @@ use item::{
 pub(super) fn fixture() -> CompiledEntityAssets {
     let source_bytes = br#"{"format_version":"1.10.0"}"#;
     CompiledEntityAssets {
+        item_use_profiles: Box::new([]),
         seat_layouts: Box::new([]),
         source_manifest_sha256: [0x11; 32],
         block_visual_count: 0,
@@ -81,6 +82,7 @@ pub(super) fn fixture() -> CompiledEntityAssets {
         item_visual_aliases: Box::new([]),
         render: Default::default(),
     }
+    .with_unresolved_item_use()
     .with_unresolved_seats()
 }
 
@@ -459,6 +461,7 @@ pub(super) fn carrier_v4_fixture() -> CompiledEntityAssetsV4 {
     .into_boxed_slice();
 
     CompiledEntityAssetsV4 {
+        item_use_profiles: Box::new([]),
         seat_layouts: Box::new([]),
         source_manifest_sha256: [0x21; 32],
         block_visual_count: 8,
@@ -682,6 +685,7 @@ pub(super) fn carrier_v4_fixture() -> CompiledEntityAssetsV4 {
             geometries: Box::new([]),
         },
     }
+    .with_unresolved_item_use()
     .with_unresolved_seats()
 }
 
