@@ -191,7 +191,7 @@ fn ui_custom_definition_overrides_across_layers_without_relisting() {
         )],
     );
     let view = resource_pack::LayeredPackView::new(resource_pack::validate_handoff(
-        protocol::ResourcePackHandoff::from_archives(vec![lower, upper]),
+        protocol::ResourcePackHandoff::from_archives(vec![upper, lower]),
     ));
     let pack = super::collect_server_ui(&view).unwrap();
     assert!(pack.ui_layers[1].iter().any(|(name, _)| name == path));
@@ -361,8 +361,8 @@ fn texture_sets_supply_color_layers() {
 fn language_files_merge_across_the_stack_by_precedence() {
     let _cache = overlay_cache();
     let handoff = protocol::ResourcePackHandoff::from_archives(vec![
-        lang_pack(2, b"\xef\xbb\xbfshared=bottom\nbottom.only=B"),
         lang_pack(1, b"shared=top\ntop.only=T"),
+        lang_pack(2, b"\xef\xbb\xbfshared=bottom\nbottom.only=B"),
     ]);
     let application = super::prepare_pack_application(
         handoff,
@@ -390,6 +390,7 @@ fn overlay_cache_reuses_the_previous_session_compile() {
             collides: true,
             collision_boxes: None,
             selection: Default::default(),
+            friction: None,
             visual: Default::default(),
         }]
         .into(),
@@ -443,6 +444,60 @@ fn overlay_cache_reuses_the_previous_session_compile() {
     assert_eq!(
         compiles, 3,
         "a different device capacity cannot reuse the old overlay"
+    );
+}
+
+// Re-applying a pack after another reuses its compiled blocks, identical to a fresh compile.
+#[test]
+fn reapplied_stack_reuses_blocks_identical_to_a_fresh_compile() {
+    use std::sync::Arc;
+    let _cache = overlay_cache();
+    let keys = assets::MaterialKeys::from_entries([(5, "reapply_key")]);
+    let blocks = protocol::CustomBlocks::default();
+    let limit = super::overlay_texture_layer_limit();
+    let stack = |id| {
+        resource_pack::validate_handoff(protocol::ResourcePackHandoff::from_archives(vec![
+            archive(
+                id,
+                &[
+                    (
+                        "textures/terrain_texture.json",
+                        br#"{"texture_data":{"reapply_key":{"textures":"textures/blocks/reapply"}}}"#,
+                    ),
+                    ("textures/blocks/reapply.png", &png(16, 16)),
+                ],
+            ),
+        ]))
+    };
+    let fresh = |stack: &Arc<resource_pack::ValidatedPackStack>| {
+        let view = resource_pack::LayeredPackView::tracked(stack.clone());
+        super::compile_block_overlay(&view, &blocks, false, Some(&keys), limit)
+    };
+    let mut compiles = 0;
+    let mut cached = |stack: &Arc<resource_pack::ValidatedPackStack>| {
+        let view = resource_pack::LayeredPackView::tracked(stack.clone());
+        super::cached_block_overlay(
+            &super::stack_fingerprint(stack),
+            &view,
+            &blocks,
+            false,
+            limit,
+            || {
+                compiles += 1;
+                super::compile_block_overlay(&view, &blocks, false, Some(&keys), limit)
+                    .map(Arc::new)
+            },
+        )
+    };
+    let (first, second) = (stack(41), stack(42));
+    let applied = cached(&first).expect("the pack overrides a vanilla key");
+    cached(&second);
+    let reapplied = cached(&first).expect("the pack overrides a vanilla key");
+    assert_eq!(compiles, 2, "switching back does not compile again");
+    assert!(Arc::ptr_eq(&applied, &reapplied));
+    assert_eq!(
+        format!("{:?}", reapplied),
+        format!("{:?}", fresh(&first).expect("uncached compile")),
     );
 }
 
@@ -629,4 +684,44 @@ fn the_same_blocks_share_the_extended_carrier_and_its_texture_identity() {
         released.upgrade().is_none(),
         "the carrier pins no extension"
     );
+}
+
+#[test]
+fn block_entity_art_reads_texture_sets_and_tracks_missing_overrides() {
+    let name = "textures/entity/chest/normal";
+    let placement = assets::BlockEntityPlacement {
+        name: name.into(),
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+    };
+    let bytes =
+        assets::encode_block_entity_catalog(b"{}", 1, 1, &[10, 20, 30, 255], &[placement]).unwrap();
+    let base = assets::RuntimeBlockEntityAssets::decode(&bytes).unwrap();
+    let view = files_pack(&[(
+        "textures/entity/chest/normal.texture_set.json",
+        br#"{"minecraft:texture_set":{"color":[200,100,50]}}"#,
+    )]);
+    let view = resource_pack::LayeredPackView::tracked(view.shared_stack());
+    let changed = super::super::block_entity_art::prepare_over(
+        &view,
+        &base,
+        &render_model::BlockEntityArtworkPreparer::default(),
+    )
+    .unwrap();
+    assert_eq!(changed.atlas().texel(name, 0, 0), Some([200, 100, 50, 255]));
+    let inputs = view.dependencies().unwrap().snapshot();
+    assert!(inputs.iter().any(|input| matches!(input,
+        resource_pack::PackDependency::File { path, .. }
+            if path == "textures/entity/chest/normal.png"
+    )));
+    let empty = files_pack(&[]);
+    let restored = super::super::block_entity_art::prepare_over(
+        &empty,
+        &base,
+        &render_model::BlockEntityArtworkPreparer::default(),
+    )
+    .unwrap();
+    assert_eq!(restored.atlas().texel(name, 0, 0), Some([10, 20, 30, 255]));
 }

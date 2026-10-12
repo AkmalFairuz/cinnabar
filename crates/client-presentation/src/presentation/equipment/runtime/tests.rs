@@ -2,6 +2,7 @@
 
 use actor_animation::ItemAnimationState;
 use bevy::math::Quat;
+use render_api::PoseGeneration;
 use render_model::ActorRenderIdentity;
 use sha2::Digest;
 use sha2::Sha256;
@@ -134,7 +135,7 @@ fn block_fixture() -> (EquipmentRuntime, ActorRigSubmission, WornItem) {
                 ingress_sequence: 1,
                 source_tick: None,
                 movement_revision: 1,
-                pose_generation: 1,
+                pose_generation: PoseGeneration::new(1),
                 layer: ACTOR_LAYER_BODY,
             },
             rig,
@@ -276,6 +277,7 @@ fn carried_cube_alpha_mode_follows_world_materials_for_both_hands() {
     let overlay = BlockOverlay {
         visuals: (0..flags.len())
             .map(|material| BlockVisual {
+                native_material: assets::native_material::NativeMaterialFacts::Unresolved,
                 faces: [material as u32; 6],
                 flags: BlockFlags::CUBE_GEOMETRY,
                 kind: VisualKind::Cube,

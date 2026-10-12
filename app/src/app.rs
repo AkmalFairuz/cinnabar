@@ -1,10 +1,10 @@
 #[cfg(not(feature = "acceptance"))]
 use crate::acceptance::AcceptanceRun;
-use crate::runtime::network::resource_packs::PackApplication;
 #[cfg(feature = "acceptance")]
-use crate::runtime::phase3_evidence::{
-    Phase3EvidenceEmitter, Phase3EvidenceIdentitySource, emit_phase3_evidence,
+use crate::runtime::movement_evidence::{
+    MovementEvidenceEmitter, MovementEvidenceIdentitySource, emit_movement_evidence,
 };
+use crate::runtime::network::resource_packs::PackApplication;
 #[cfg(feature = "acceptance")]
 use crate::runtime::shutdown::finish_acceptance_run;
 #[cfg(feature = "acceptance")]
@@ -179,7 +179,7 @@ pub(crate) fn configure_client_production_frame_systems(app: &mut App) {
     #[cfg(not(feature = "acceptance"))]
     app.init_resource::<AcceptanceRun>();
     #[cfg(feature = "acceptance")]
-    app.init_resource::<Phase3EvidenceEmitter>();
+    app.init_resource::<MovementEvidenceEmitter>();
     app.init_resource::<crate::runtime::network::PackReload>();
     configure_client_authority_systems(app);
     configure_actor_render_systems(app);
@@ -286,7 +286,7 @@ pub(crate) fn configure_client_production_frame_systems(app: &mut App) {
             (
                 flush_inventory_network,
                 #[cfg(feature = "acceptance")]
-                emit_phase3_evidence,
+                emit_movement_evidence,
                 #[cfg(not(feature = "acceptance"))]
                 crate::runtime::telemetry::discard_completed_movement_evidence,
                 produce_melee,

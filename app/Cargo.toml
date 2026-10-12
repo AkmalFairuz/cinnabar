@@ -1,5 +1,5 @@
 [package]
-name = "bedrock-client"
+name = "cinnabar"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -28,7 +28,7 @@ doctest = false
 
 # main.rs only dispatches into the library; its tests live there.
 [[bin]]
-name = "bedrock-client"
+name = "cinnabar"
 path = "src/main.rs"
 test = false
 
@@ -51,6 +51,7 @@ tracy = ["bevy/trace", "bevy/debug", "dep:tracing-tracy", "dep:profiling", "chun
 reports = []
 
 [dependencies]
+env-compat = { path = "../crates/env-compat" }
 simulation-clock = { path = "../crates/simulation-clock" }
 render-scene = { path = "../crates/render-scene" }
 client-shell = { path = "../crates/client-shell" }

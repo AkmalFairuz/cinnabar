@@ -15,6 +15,7 @@ reads = [
 test-support = []
 
 [dependencies]
+env-compat = { path = "../env-compat" }
 web-time.workspace = true
 simulation-clock = { path = "../simulation-clock" }
 block-transform = { path = "../block-transform" }
@@ -24,6 +25,7 @@ actor-animation = { path = "../actor-animation" }
 inventory = { path = "../inventory" }
 player-state = { path = "../player-state" }
 protocol = { path = "../protocol" }
+render-api = { path = "../render-api" }
 semantic-input = { path = "../input" }
 sim = { path = "../sim" }
 world = { path = "../world" }

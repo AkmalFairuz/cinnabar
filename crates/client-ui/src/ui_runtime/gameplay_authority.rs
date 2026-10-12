@@ -183,8 +183,8 @@ impl UiRuntime {
 
     /// Applies every queued authoritative inventory event to the retained
     /// hotbar/offhand mirror. Runs once per frame before presentation; the
-    /// queue would otherwise grow without a consumer until the Phase 5.5
-    /// container store takes over this drain.
+    /// queue would otherwise grow without a consumer until the container store
+    /// takes over this drain.
     pub fn drain_pending_inventory(&mut self, player_runtime: &mut player_state::PlayerState) {
         self.drain_inventory_prefix(player_runtime, None);
         player_runtime.inventory.finish_drain();
@@ -508,12 +508,13 @@ impl UiRuntime {
         self.session_items.as_ref()?.name_color(identifier)
     }
 
-    pub fn item_glint(&self, stack: &protocol::NetworkItemStack, identifier: &str) -> bool {
-        super::item_facts::glint_for_facts(
-            self.stack_facts(stack).has_enchantment_list,
-            identifier,
-            self.item_components(identifier),
-        )
+    /// Combines cached enchantments with the current numeric registry's shine fact.
+    pub fn item_glint(
+        &self,
+        stack: &protocol::NetworkItemStack,
+        intrinsic: assets::item::glint::ItemGlint,
+    ) -> bool {
+        super::item_facts::glint_for_facts(self.stack_facts(stack).has_enchantment_list, intrinsic)
     }
 
     /// Returns shared immutable NBT facts; descriptor and language generations are resolved separately.
