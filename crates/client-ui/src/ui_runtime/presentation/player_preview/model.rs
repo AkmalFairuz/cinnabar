@@ -127,20 +127,20 @@ impl MenuPreviewModel {
             return None;
         }
         let source = skin.geometry.clone();
+        // A browser cannot start threads, so its model builds on this frame.
+        if cfg!(target_arch = "wasm32") {
+            let prepared = prepared_model(skin.clone());
+            if prepared.is_none() {
+                self.rejected = source;
+            }
+            return prepared;
+        }
         let skin = skin.clone();
         let (sender, receiver) = crossbeam_channel::bounded(1);
         if std::thread::Builder::new()
             .name("menu-skin-model".into())
             .spawn(move || {
-                let prepared = model_vertices(&skin).map(|vertices| PreparedModel {
-                    bounds: skin
-                        .geometry
-                        .as_ref()
-                        .map(|_| super::fitting::OrbitBounds::new(&vertices)),
-                    source: skin.geometry,
-                    vertices,
-                });
-                let _ = sender.send(prepared);
+                let _ = sender.send(prepared_model(skin));
             })
             .is_err()
         {
@@ -152,7 +152,19 @@ impl MenuPreviewModel {
     }
 }
 
-/// Builds immutable preview vertices only on a worker or in a synchronous fixture.
+/// `skin`'s preview model with its orbit bounds, or `None` when its geometry does not build.
+fn prepared_model(skin: render_api::StandardSkin) -> Option<PreparedModel> {
+    model_vertices(&skin).map(|vertices| PreparedModel {
+        bounds: skin
+            .geometry
+            .as_ref()
+            .map(|_| super::fitting::OrbitBounds::new(&vertices)),
+        source: skin.geometry,
+        vertices,
+    })
+}
+
+/// Builds immutable preview vertices on a worker, in a synchronous fixture, or in a browser.
 fn model_vertices(skin: &render_api::StandardSkin) -> Option<Arc<[ActorVertex]>> {
     #[cfg(test)]
     BUILT_ON_THIS_THREAD.with(|built| built.set(built.get() + 1));
