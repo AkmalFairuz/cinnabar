@@ -75,7 +75,10 @@ pub fn decode_font_face_bundle(
     let mut offset = header + count * ENTRY_BYTES;
     let mut entries = Vec::with_capacity(count);
     let (mut pages, mut decoded) = (0usize, 0usize);
-    for entry in body[header..header + count * ENTRY_BYTES].chunks_exact(ENTRY_BYTES) {
+    for entry in body[header..header + count * ENTRY_BYTES]
+        .as_chunks::<ENTRY_BYTES>()
+        .0
+    {
         let em = u32::from_le_bytes(entry[..4].try_into().unwrap());
         let rendering = match entry[4] {
             0 => FontRendering::Coverage,
@@ -97,7 +100,9 @@ pub fn decode_font_face_bundle(
         pages += entry_pages;
         decoded += entry_bytes;
         if pages > MAX_FONT_PAGES || decoded > MAX_FONT_DECODED_BYTES {
-            return Err(invalid("face bundle pages exceed the shared decoded budget"));
+            return Err(invalid(
+                "face bundle pages exceed the shared decoded budget",
+            ));
         }
         entries.push((em, rendering, offset..end));
         offset = end;

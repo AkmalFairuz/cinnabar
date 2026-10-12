@@ -442,7 +442,7 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
         Arc::clone(&runtime_assets),
         Arc::clone(&entity_runtime),
     ))
-    .insert_resource({
+    .insert_resource(UiRuntimeResource({
         let mut ui_runtime = UiRuntime::new(0);
         ui_runtime.set_item_fuel_catalog(Arc::clone(&entity_runtime));
         ui_runtime.set_food_catalog(food_catalog);
@@ -452,11 +452,11 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
         ui_runtime.set_lang_catalog(lang_assets.into_runtime());
         ui_runtime.set_active_language(active_lang);
         ui_runtime
-    })
+    }))
     .insert_resource(client_state::PlayerRuntime(player_state::PlayerState::new(
         0,
     )))
-    .insert_resource(ui_presentation)
+    .insert_resource(UiPresentationResource(ui_presentation))
     .insert_resource(WorldClock::default())
     .insert_resource(WeatherState::default())
     .init_resource::<environment::WeatherTickFrame>()

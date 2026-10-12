@@ -11,6 +11,7 @@ test-support = []
 [dependencies]
 web-time.workspace = true
 async-platform = { path = "../async-platform" }
+simulation-clock = { path = "../simulation-clock" }
 crossbeam-channel = "0.5"
 bridge = { path = "../bridge" }
 bytes.workspace = true

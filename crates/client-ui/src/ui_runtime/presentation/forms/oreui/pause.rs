@@ -1,4 +1,3 @@
-use super::super::engine::screen::PaintError;
 use super::super::menu_screens::Translate;
 use super::{
     CharacterPreview,
@@ -7,6 +6,7 @@ use super::{
     widgets::{self, Variant},
 };
 use launcher::menu::{MenuAction, MenuScreen, MenuView};
+use ui_engine::engine::screen::PaintError;
 
 /// The pause screen's button that returns to the game.
 pub const RESUME_LABEL: &str = "Resume game";
