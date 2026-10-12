@@ -33,7 +33,7 @@ use client_presentation::local_player::{
 use client_presentation::server_camera::ServerCameraInstructions;
 use client_ui::ui_runtime::UiRuntime;
 use gameplay::movement::TELEPORT_ACK_ADMITTED_TICK_BUDGET;
-use render::ChunkUploadBudget;
+use render_scene::ChunkUploadBudget;
 use sim::{CollisionIdSpace, CollisionRegistryIdentity, WorldCollisionIdentity};
 use {
     client_interaction::movement::{
@@ -520,13 +520,12 @@ fn dimension_transfer_starts_loading_and_tracks_later_server_teleports() {
     app.update();
     let outgoing = packets.drain();
     assert_eq!(outgoing.len(), 1);
-    let session = protocol::BedrockSession { shield_item_id: 0 };
     assert_eq!(
-        protocol::encode(&outgoing[0], &session).unwrap(),
-        protocol::encode(
-            &protocol::loading_screen_packet(protocol::LoadingScreenPhase::Start, Some(42)),
-            &session
-        )
+        protocol::encode(&outgoing[0]).unwrap(),
+        protocol::encode(&protocol::loading_screen_packet(
+            protocol::LoadingScreenPhase::Start,
+            Some(42)
+        ),)
         .unwrap()
     );
     let world = app.world().resource::<ClientWorld>();

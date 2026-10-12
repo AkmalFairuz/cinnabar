@@ -46,13 +46,14 @@ pub(crate) struct ModCueFeed(pub Vec<mod_host::ModCue>);
 #[derive(Resource)]
 struct ModRuntime {
     hosts: ModHosts,
+    panel_fonts: Vec<Option<std::sync::Arc<assets::RuntimeFontCatalog>>>,
     /// Per-mod render generations behind the last merged scene.
     render_sources: Vec<u64>,
     render_merge: mod_render::RenderMerge,
     last_reload: Instant,
     controls: mod_host::ControlFrame,
-    reload_on_main: bool,
     registration_identity: Option<[u8; 32]>,
+    registration_host: Option<usize>,
     registration_request: Option<(u64, String)>,
     suspended: bool,
     hud_editor_owner: Option<hud_editor::Owner>,
@@ -95,14 +96,21 @@ pub(crate) fn configure_from_environment(app: &mut App) {
         configure_package(app, Path::new(package));
     } else if let Some(path) = path.as_deref() {
         configure(app, Some(Path::new(path)));
-    } else {
+    }
+    #[cfg(feature = "local-mods")]
+    {
+        let configured = app.world().contains_resource::<ModRuntime>();
         match launcher::install_layout::InstallLayout::discover()
             .map_err(|error| error.to_string())
             .and_then(|layout| registration::Watcher::start(layout.user_config_root))
         {
             Ok(watcher) => {
                 app.insert_resource(watcher);
-                configure_systems(app, true);
+                if configured {
+                    configure_registration_systems(app);
+                } else {
+                    configure_systems(app, true);
+                }
             }
             Err(error) => eprintln!("Local extension watcher unavailable: {error}"),
         }
@@ -161,6 +169,7 @@ fn configure_entries(app: &mut App, mods: Vec<(multi::ModSource, ModGrants)>) {
 fn install(app: &mut App, hosts: Vec<ModHost>) {
     let mut hosts = hosts.into_iter();
     let Some(host) = hosts.next() else { return };
+    app.init_resource::<client_presentation::actor_publication::ActorPresentationStyle>();
     let companions: Vec<_> = hosts.map(|host| multi::Companion { host }).collect();
     let controls = host.grants().controls
         || companions
@@ -168,13 +177,14 @@ fn install(app: &mut App, hosts: Vec<ModHost>) {
             .any(|companion| companion.host.grants().controls);
     app.insert_resource(VisualTimeOverride(host.time_override()))
         .insert_resource(ModRuntime {
+            panel_fonts: vec![None; 1 + companions.len()],
             hosts: ModHosts::new(host, companions),
             render_sources: Vec::new(),
             render_merge: Default::default(),
             last_reload: Instant::now(),
             controls: mod_host::empty_controls(),
-            reload_on_main: true,
             registration_identity: None,
+            registration_host: None,
             registration_request: None,
             suspended: false,
             hud_editor_owner: None,
@@ -183,11 +193,18 @@ fn install(app: &mut App, hosts: Vec<ModHost>) {
         .init_resource::<interaction::ModInteraction>();
     if controls && let Some(path) = std::env::var_os(font::FONT_ENV) {
         match font::load(Path::new(&path)).and_then(|font| {
+            let font = std::sync::Arc::new(font);
             app.world_mut()
                 .get_resource_mut::<UiPresentationRuntime>()
                 .ok_or_else(|| "presentation is unavailable".to_owned())?
-                .set_mod_panel_font(Some(std::sync::Arc::new(font)))
-                .map_err(|error| error.to_string())
+                .set_mod_panel_font(Some(font.clone()))
+                .map_err(|error| error.to_string())?;
+            let font = Some(font);
+            app.world_mut()
+                .resource_mut::<ModRuntime>()
+                .panel_fonts
+                .fill(font);
+            Ok(())
         }) {
             Ok(()) => {}
             Err(error) => eprintln!("Optional personal-panel font unavailable: {error}"),
@@ -198,6 +215,7 @@ fn install(app: &mut App, hosts: Vec<ModHost>) {
 
 #[cfg(feature = "local-mods")]
 fn configure_systems(app: &mut App, watching: bool) {
+    app.init_resource::<client_presentation::actor_publication::ActorPresentationStyle>();
     ghost::configure(app);
     block_highlights::configure(app);
     fullbright::configure(app);
@@ -206,22 +224,12 @@ fn configure_systems(app: &mut App, watching: bool) {
         .add_plugins(::render::ModRenderPlugin)
         .add_systems(Update, render::grant_depth_sampling);
     if watching {
-        app.add_systems(
-            Update,
-            (
-                registration::install_pending,
-                ApplyDeferred,
-                input::prepare_mod_input,
-            )
-                .chain()
-                .before(ClientFrameSet::RawInput),
-        );
-    } else {
-        app.add_systems(
-            Update,
-            input::prepare_mod_input.before(ClientFrameSet::RawInput),
-        );
+        configure_registration_systems(app);
     }
+    app.add_systems(
+        Update,
+        input::prepare_mod_input.before(ClientFrameSet::RawInput),
+    );
     app.add_systems(
         Update,
         drive_mod
@@ -232,6 +240,17 @@ fn configure_systems(app: &mut App, watching: bool) {
     );
     app.init_resource::<packet_delay::RealPositionSnapshot>()
         .add_systems(Update, packet_delay::publish_packet_delay.after(drive_mod));
+}
+
+/// Flushes registration transitions before the shared physical-input router.
+#[cfg(feature = "local-mods")]
+fn configure_registration_systems(app: &mut App) {
+    app.add_systems(
+        Update,
+        (registration::install_pending, ApplyDeferred)
+            .chain()
+            .before(input::prepare_mod_input),
+    );
 }
 
 /// Runs the bounded guest and publishes only its validated presentation output.
@@ -256,7 +275,7 @@ fn drive_mod(
     focus: Option<Res<client_state::CursorFocus>>,
     driven: Option<Res<client_state::DrivenInput>>,
     windows: Query<(&Window, Option<&CursorOptions>), With<PrimaryWindow>>,
-    ui: Res<UiRuntime>,
+    mut ui: ResMut<UiRuntime>,
     menu: Option<Res<MenuRuntime>>,
     mut presentation: ResMut<UiPresentationRuntime>,
     time_override: Option<ResMut<VisualTimeOverride>>,
@@ -264,14 +283,18 @@ fn drive_mod(
     interaction: Option<ResMut<interaction::ModInteraction>>,
     mut outputs: ModOutputs,
     mut screen_input: screens::ScreenInput,
+    time: Res<Time<Real>>,
     observation: (
         Option<Res<registration::Watcher>>,
-        Option<ResMut<::render::ModRenderScene>>,
+        Option<ResMut<render_scene::ModRenderScene>>,
         Query<(&GlobalTransform, &Projection), With<client_presentation::camera::FlyCamera>>,
         Local<presentation_facts::FrameRate>,
+        Local<module_observations::ModuleObserver>,
+        Option<ResMut<client_presentation::actor_publication::ActorPresentationStyle>>,
     ),
 ) {
-    let (watcher, render_scene, cameras, mut frame_rate) = observation;
+    let (watcher, render_scene, cameras, mut frame_rate, mut module_observer, mut actor_style) =
+        observation;
     let focused = windows.single().is_ok_and(|(window, _)| window.focused);
     let absorbed = client_shell::screen_policy::absorbs_input(
         &player_runtime,
@@ -290,7 +313,7 @@ fn drive_mod(
                 runtime.hosts.host(index).is_active() && runtime.hosts.host(index).grants().movement
             })
     });
-    gameplay.synchronize_jump_scope(movement_allowed && captured && !absorbed);
+    gameplay.synchronize_jump_scope(movement_allowed && captured && !absorbed, &ui);
     let menu_open = menu.as_deref().is_some_and(MenuRuntime::is_visible);
     screen_input.modifiers(focused && !menu_open);
     let (Some(mut extension), Some(mut time_override), Some(mut interaction)) =
@@ -304,8 +327,10 @@ fn drive_mod(
     let mut reloaded = false;
     if extension.last_reload.elapsed() >= RELOAD_INTERVAL {
         extension.last_reload = Instant::now();
-        let first = usize::from(!extension.reload_on_main);
-        for index in first..extension.hosts.host_count() {
+        for index in 0..extension.hosts.host_count() {
+            if extension.registration_host == Some(index) {
+                continue;
+            }
             match extension.hosts.host_mut(index).reload_if_changed() {
                 // A new instance never sees cues from before it existed.
                 Ok(true) => {
@@ -326,14 +351,15 @@ fn drive_mod(
         }
     }
     if reloaded {
-        gameplay.synchronize_jump_scope(false);
-        gameplay.synchronize_jump_scope(movement_allowed && captured && !absorbed);
+        gameplay.synchronize_jump_scope(false, &ui);
+        gameplay.synchronize_jump_scope(movement_allowed && captured && !absorbed, &ui);
     }
     let pressed = keybind_allowed(focused, absorbed) && keys.just_pressed(DEMO_KEY);
     let controls = std::mem::replace(&mut extension.controls, mod_host::empty_controls());
     let (network, camera, cues, item_use) = outputs;
     let previous_cues = cues.as_ref().map_or_else(Vec::new, |feed| feed.0.clone());
     let registration = extension.registration_request.clone();
+    let registration_host = extension.registration_host;
     let player_state = gameplay.player_state(
         (0..extension.hosts.host_count()).any(|index| {
             let host = extension.hosts.host(index);
@@ -343,6 +369,13 @@ fn drive_mod(
         &ui,
     );
     let world_observation = gameplay.world_observation(&ui);
+    let modules = module_observer.capture(
+        &gameplay,
+        &ui,
+        world_observation.as_ref(),
+        &player_runtime,
+        Some(&interaction),
+    );
     let chat = if world_observation.is_some() {
         presentation_facts::chat_snapshot(&ui)
     } else {
@@ -369,18 +402,19 @@ fn drive_mod(
             player_state: player_state.as_ref(),
             world_observation: world_observation.as_ref(),
             fps,
+            modules: Some(&modules),
             sidebar: sidebar.as_ref(),
             chat: &chat,
         },
         |grants| {
             let snapshot = gameplay.snapshot(captured && !absorbed, grants);
             let mobs = gameplay.mobs(snapshot.as_ref(), grants);
-            let movement = gameplay.movement_snapshot(captured && !absorbed, grants);
+            let movement = gameplay.movement_snapshot(captured && !absorbed, grants, &ui);
             (snapshot, mobs, movement)
         },
         |index, error| {
             callback_failed = true;
-            if index == 0
+            if Some(index) == registration_host
                 && let Some((generation, request_id)) = &registration
                 && let Some(watcher) = watcher.as_ref()
             {
@@ -389,18 +423,30 @@ fn drive_mod(
             eprintln!("Cinnabar extension callback failed: {error}");
         },
     );
+    for index in 0..extension.hosts.host_count() {
+        for message in extension.hosts.host_mut(index).take_local_messages() {
+            ui.push_local_chat_line(
+                message.into(),
+                u64::try_from(time.elapsed().as_millis()).unwrap_or(u64::MAX),
+            );
+        }
+    }
     render::publish(render_scene, &mut extension);
     if let Some(watcher) = watcher.as_ref() {
-        watcher.remember_settings(Some(&extension.hosts.host));
+        watcher.remember_settings(
+            extension
+                .registration_host
+                .map(|index| extension.hosts.host(index)),
+        );
     }
     if callback_failed || merged.jump_cancel {
-        gameplay.synchronize_jump_scope(false);
+        gameplay.synchronize_jump_scope(false, &ui);
     }
     let movement_allowed = (0..extension.hosts.host_count()).any(|index| {
         extension.hosts.host(index).is_active() && extension.hosts.host(index).grants().movement
     });
-    gameplay.synchronize_jump_scope(movement_allowed && captured && !absorbed);
-    gameplay.pulse_jump(merged.jump_pulse && !merged.jump_cancel);
+    gameplay.synchronize_jump_scope(movement_allowed && captured && !absorbed, &ui);
+    gameplay.pulse_jump(merged.jump_pulse && !merged.jump_cancel, &ui);
     interaction.attack_reach = merged.attack_reach;
     interaction.attack_pulse = merged.attack_pulse && gameplay.pulse_attack();
     if let Some(delta) = merged.delta {
@@ -425,6 +471,22 @@ fn drive_mod(
     }
     let hud_owner = extension.hosts.hud_owner();
     let hud = hud_owner.and_then(|owner| extension.hosts.host(owner).hud());
+    if let Some(style) = actor_style.as_mut() {
+        style.attackable_color = hud
+            .and_then(|hud| hud.actor_style.as_ref())
+            .and_then(|style| style.attackable_color);
+        style.attackable_actor = if style.attackable_color.is_some() {
+            module_observations::current_target(&gameplay, &ui, Some(&interaction)).flatten()
+        } else {
+            None
+        };
+        style.hurt_armor_color = hud
+            .and_then(|hud| hud.actor_style.as_ref())
+            .and_then(|style| style.hurt_armor_color);
+        style.hurt_color = hud
+            .and_then(|hud| hud.actor_style.as_ref())
+            .and_then(|style| style.hurt_color);
+    }
     if let Err(error) = presentation.set_mod_hud(hud) {
         eprintln!("Cinnabar extension HUD cards rejected: {error}");
     }
@@ -437,6 +499,9 @@ fn drive_mod(
         eprintln!("Cinnabar extension crosshair rejected: {error}");
     }
     let owner = extension.hosts.panel_owner();
+    if let Err(error) = presentation.set_mod_panel_font(extension.panel_fonts[owner].clone()) {
+        eprintln!("Cinnabar extension panel font rejected: {error}");
+    }
     if let Err(error) = presentation.set_mod_panel(extension.hosts.host(owner).panel()) {
         eprintln!("Cinnabar extension panel rejected: {error}");
         extension.hosts.host_mut(owner).set_panel_open(false);
@@ -601,6 +666,8 @@ pub(crate) mod ghost;
 mod input;
 #[cfg(feature = "local-mods")]
 pub(crate) mod interaction;
+#[cfg(feature = "local-mods")]
+mod module_observations;
 #[cfg(feature = "local-mods")]
 pub(crate) mod packet_delay;
 #[cfg(feature = "local-mods")]
