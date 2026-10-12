@@ -23,15 +23,9 @@ if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($payload)) -ne $outPath) 
 Remove-Item -LiteralPath $payload -Recurse -Force -ErrorAction SilentlyContinue
 $resources = Join-Path $payload "resources"
 $kit = Join-Path $resources "prep-kit"
-<<<<<<< HEAD
-New-Item -ItemType Directory -Force (Join-Path $resources "assets"), (Join-Path $resources "licenses"), (Join-Path $resources "fonts"), (Join-Path $kit "bin"), (Join-Path $kit "assets"), (Join-Path $kit "assets/fonts"), (Join-Path $kit "data") | Out-Null
-Copy-Item (Join-Path $release "cinnabar.exe"), (Join-Path $release "bedrock-core.exe"), (Join-Path $release "bedrock-local-server.exe") $payload
-Copy-Item (Join-Path $release "assetc.exe") (Join-Path $kit "bin")
-=======
 New-Item -ItemType Directory -Force (Join-Path $resources "assets"), (Join-Path $resources "licenses"), (Join-Path $resources "fonts") | Out-Null
 Copy-Item (Join-Path $release "cinnabar.exe"), (Join-Path $release "bedrock-core.exe"), (Join-Path $release "bedrock-local-server.exe") $payload
 & (Join-Path $PSScriptRoot "stage-prep-kit.ps1") -Root $root -Kit $kit -Assetc (Join-Path $release "assetc.exe")
->>>>>>> origin/dev
 Copy-Item (Join-Path $root "crates/assets/data/block-physics-v2193.bin") (Join-Path $resources "assets")
 Copy-Item (Join-Path $root "THIRD_PARTY_NOTICES.md") (Join-Path $resources "assets")
 Copy-Item (Join-Path $root "LICENSE") (Join-Path $resources "licenses/Cinnabar-LICENSE.md")
