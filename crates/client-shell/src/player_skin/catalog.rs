@@ -2,8 +2,10 @@
 
 use launcher::dressing_room::{DressingRoomSkin, DressingRoomView, SkinModel};
 use serde::{Deserialize, Serialize};
+use super::files;
+#[cfg(test)]
 use std::fs;
-use std::io::{Cursor, Read};
+use std::io::Cursor;
 use std::path::{Component, PathBuf};
 use {super::*, launcher::install_layout::InstallLayout};
 
@@ -287,16 +289,16 @@ fn save(layout: &InstallLayout, view: &DressingRoomView) -> Result<(), String> {
             })
             .collect(),
     };
-    fs::create_dir_all(&layout.user_config_root).map_err(|error| error.to_string())?;
+    files::create_dir_all(&layout.user_config_root).map_err(|error| error.to_string())?;
     let path = layout.skin_selection_file();
     let temp = path.with_extension(format!("{}.tmp", launcher::install_layout::process_id()));
     let bytes = serde_json::to_vec_pretty(&preferences).map_err(|error| error.to_string())?;
     if bytes.len() as u64 > MAX_PREFERENCES_BYTES {
         return Err("The skin library could not be saved because it is too large.".to_owned());
     }
-    fs::write(&temp, bytes).map_err(|error| error.to_string())?;
-    fs::rename(&temp, path).map_err(|error| {
-        let _ = fs::remove_file(temp);
+    files::write(&temp, &bytes).map_err(|error| error.to_string())?;
+    files::rename(&temp, &path).map_err(|error| {
+        let _ = files::remove_file(&temp);
         format!("The skin selection could not be saved: {error}")
     })
 }
@@ -308,10 +310,15 @@ fn single_filename(value: &str) -> bool {
 
 fn starter(layout: &InstallLayout) -> Option<Starter> {
     let path = layout.starter_skins_asset();
-    if !path.is_file() {
-        return None;
-    }
-    let loaded = read_bounded(&path, assets::starter_skins::MAX_STARTER_SKINS_BYTES as u64)
+    // A carrier, which a browser holds in memory rather than on disk.
+    let loaded = match assets::carriers::file::read_bounded(
+        &path,
+        assets::starter_skins::MAX_STARTER_SKINS_BYTES,
+    ) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        bytes => bytes.map_err(|error| error.to_string()),
+    };
+    let loaded = loaded
         .and_then(|bytes| {
             assets::starter_skins::decode_starter_skins(&bytes).map_err(|error| error.to_string())
         })
@@ -388,7 +395,7 @@ fn geometry_catalog(data: &str) -> Result<[Arc<render_api::SkinGeometrySource>; 
 }
 
 fn png_bytes(path: &Path) -> Result<Vec<u8>, String> {
-    let size = fs::metadata(path).map_err(|error| error.to_string())?.len();
+    let size = files::len(path).map_err(|error| error.to_string())?;
     if size > MAX_PNG_BYTES {
         return Err("Choose a PNG smaller than 4 MB.".to_owned());
     }
@@ -396,12 +403,7 @@ fn png_bytes(path: &Path) -> Result<Vec<u8>, String> {
 }
 
 fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
-    let mut bytes = Vec::new();
-    fs::File::open(path)
-        .map_err(|error| error.to_string())?
-        .take(limit + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|error| error.to_string())?;
+    let bytes = files::read_bounded(path, limit).map_err(|error| error.to_string())?;
     if bytes.len() as u64 > limit {
         return Err("The skin asset is too large.".to_owned());
     }

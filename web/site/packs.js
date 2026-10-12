@@ -28,8 +28,8 @@ async function transact(mode, work) {
   });
 }
 
-/** Opens a file picker for pack archives; resolves with `[name, bytes]` per picked file. */
-function pick(extensions) {
+/** Opens a file picker for files with `extensions`; resolves with `[name, bytes]` per picked file. */
+export function pick(extensions) {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";

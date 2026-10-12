@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use launcher::install_layout::InstallLayout;
 
 pub mod catalog;
+pub(crate) mod files;
 
 /// The local player's client-authored skin and stable local uuid. Cheap to clone (Arc-backed):
 /// `local_uuid` keys the synthetic self profile the client-world stream inserts when the server

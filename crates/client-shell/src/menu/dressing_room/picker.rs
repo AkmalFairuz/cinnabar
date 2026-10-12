@@ -88,3 +88,46 @@ pub(super) fn pick(cape: bool) -> Result<Option<PathBuf>, String> {
         Err("The PNG chooser is unavailable.".to_owned())
     }
 }
+
+/// Asks the page to pick skin or cape files (`globalThis.cinnabarPickFiles` in `web/site/packs.js`)
+/// and queues what the player chose, possibly nothing, as one [`super::Job::Picked`].
+#[cfg(target_arch = "wasm32")]
+pub(super) fn pick_in_page(cape: bool, commands: crossbeam_channel::Sender<super::Job>) {
+    use js_sys::{Array, Function, Promise, Reflect, Uint8Array};
+    use wasm_bindgen::{JsCast, JsValue};
+    async fn chosen(cape: bool) -> Option<Vec<(String, Vec<u8>)>> {
+        let pick: Function = Reflect::get(&js_sys::global(), &"cinnabarPickFiles".into())
+            .ok()?
+            .dyn_into()
+            .ok()?;
+        let extensions: Array = if cape {
+            ["png"].iter().map(|extension| JsValue::from_str(extension)).collect()
+        } else {
+            ["png", "json", "mcpack"]
+                .iter()
+                .map(|extension| JsValue::from_str(extension))
+                .collect()
+        };
+        let promise: Promise = pick.call1(&JsValue::NULL, &extensions).ok()?.dyn_into().ok()?;
+        let picked: Array = wasm_bindgen_futures::JsFuture::from(promise)
+            .await
+            .ok()?
+            .dyn_into()
+            .ok()?;
+        Some(
+            picked
+                .iter()
+                .filter_map(|entry| {
+                    let entry: Array = entry.dyn_into().ok()?;
+                    let name = entry.get(0).as_string()?;
+                    let bytes: Uint8Array = entry.get(1).dyn_into().ok()?;
+                    Some((name, bytes.to_vec()))
+                })
+                .collect(),
+        )
+    }
+    wasm_bindgen_futures::spawn_local(async move {
+        let files = chosen(cape).await.unwrap_or_default();
+        let _ = commands.send(super::Job::Picked { cape, files });
+    });
+}

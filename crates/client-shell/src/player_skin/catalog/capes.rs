@@ -61,9 +61,9 @@ pub fn import_cape(
         ));
     }
     let dir = layout.dressing_room_capes_dir();
-    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    files::create_dir_all(&dir).map_err(|error| error.to_string())?;
     let path = dir.join(format!("{digest:x}.png"));
-    fs::write(&path, bytes).map_err(|error| error.to_string())?;
+    files::write(&path, bytes).map_err(|error| error.to_string())?;
     let entry = DressingRoomCape {
         id,
         name: source

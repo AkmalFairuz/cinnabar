@@ -9,11 +9,21 @@ mod picker;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug)]
 pub(super) struct Worker {
     commands: crossbeam_channel::Sender<Job>,
     results: crossbeam_channel::Receiver<Outcome>,
     pending: usize,
+    #[cfg(target_arch = "wasm32")]
+    inline: std::sync::Arc<std::sync::Mutex<Inline>>,
+}
+
+impl std::fmt::Debug for Worker {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Worker")
+            .field("pending", &self.pending)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug)]
@@ -27,6 +37,12 @@ enum Job {
     ImportCape(Option<PathBuf>),
     RenameCape(usize, String),
     DeleteCape(usize),
+    /// Files a browser player picked to import, by name; none when they cancelled.
+    #[cfg(target_arch = "wasm32")]
+    Picked {
+        cape: bool,
+        files: Vec<(String, Vec<u8>)>,
+    },
 }
 
 #[derive(Debug)]
@@ -76,7 +92,61 @@ impl Outcome {
     }
 }
 
+/// The skin library and its step, run on the worker thread or, in a browser, inline.
+struct Library {
+    layout: InstallLayout,
+    view: DressingRoomView,
+    uuid: [u8; 16],
+}
+
+impl Library {
+    /// Loads the library and the outcome that publishes it against the client's current skin.
+    fn load(layout: InstallLayout, fallback: &crate::player_skin::LocalPlayerSkin) -> (Self, Outcome) {
+        let view = crate::player_skin::catalog::load(&layout, fallback);
+        let outcome = Outcome::new(
+            &view,
+            Some(fallback.standard_skin()),
+            Some((fallback.model(), fallback.engine_version.clone())),
+            fallback.local_uuid,
+            true,
+        );
+        let library = Self {
+            layout,
+            view,
+            uuid: fallback.local_uuid,
+        };
+        (library, outcome)
+    }
+
+    /// Changes the library: runs `job`, or with `None` merges the downloaded default capes.
+    fn step(&mut self, job: Option<Job>) -> Outcome {
+        let before = self.view.active_skin();
+        let previous_model = self
+            .view
+            .selected_skin()
+            .map(|entry| (entry.model, entry.engine_version.clone()));
+        let completed_command = match job {
+            Some(job) => {
+                self.view.message = apply_job(&self.layout, &mut self.view, job).err();
+                true
+            }
+            None => {
+                crate::player_skin::catalog::merge_default_capes(&self.layout, &mut self.view);
+                false
+            }
+        };
+        Outcome::new(
+            &self.view,
+            before,
+            previous_model,
+            self.uuid,
+            completed_command,
+        )
+    }
+}
+
 impl Worker {
+    #[cfg(not(target_arch = "wasm32"))]
     fn start(
         layout: InstallLayout,
         fallback: crate::player_skin::LocalPlayerSkin,
@@ -89,6 +159,7 @@ impl Worker {
         })
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn start_with_refresh(
         layout: InstallLayout,
         fallback: crate::player_skin::LocalPlayerSkin,
@@ -99,25 +170,15 @@ impl Worker {
         std::thread::Builder::new()
             .name("skin-selection".to_owned())
             .spawn(move || {
-                let mut view = crate::player_skin::catalog::load(&layout, &fallback);
-                if outgoing
-                    .send(Outcome::new(
-                        &view,
-                        Some(fallback.standard_skin()),
-                        Some((fallback.model(), fallback.engine_version.clone())),
-                        fallback.local_uuid,
-                        true,
-                    ))
-                    .is_err()
-                {
+                let (mut library, loaded) = Library::load(layout.clone(), &fallback);
+                if outgoing.send(loaded).is_err() {
                     return;
                 }
                 let (finished, mut cape_done) = crossbeam_channel::bounded(1);
-                let cape_layout = layout.clone();
                 if std::thread::Builder::new()
                     .name("cape-textures".to_owned())
                     .spawn(move || {
-                        refresh(&cape_layout);
+                        refresh(&layout);
                         let _ = finished.send(());
                     })
                     .is_err()
@@ -125,33 +186,18 @@ impl Worker {
                     cape_done = crossbeam_channel::never();
                 }
                 loop {
-                    let before = view.active_skin();
-                    let previous_model = view
-                        .selected_skin()
-                        .map(|entry| (entry.model, entry.engine_version.clone()));
-                    let completed_command = crossbeam_channel::select! {
+                    let job = crossbeam_channel::select! {
                         recv(incoming)->job=>{
                             let Ok(job)=job else {break;};
-                            view.message=apply_job(&layout,&mut view,job).err();
-                            true
+                            Some(job)
                         },
                         recv(cape_done)->done=>{
                             cape_done=crossbeam_channel::never();
                             if done.is_err() {continue;}
-                            crate::player_skin::catalog::merge_default_capes(&layout,&mut view);
-                            false
+                            None
                         }
                     };
-                    if outgoing
-                        .send(Outcome::new(
-                            &view,
-                            before,
-                            previous_model,
-                            fallback.local_uuid,
-                            completed_command,
-                        ))
-                        .is_err()
-                    {
+                    if outgoing.send(library.step(job)).is_err() {
                         break;
                     }
                 }
@@ -163,6 +209,110 @@ impl Worker {
             pending: 1,
         })
     }
+
+    /// A browser has no threads, so the library runs inline in [`Worker::run_inline`]; default
+    /// capes download only on desktops.
+    #[cfg(target_arch = "wasm32")]
+    fn start(
+        layout: InstallLayout,
+        fallback: crate::player_skin::LocalPlayerSkin,
+    ) -> Result<Self, String> {
+        let (commands, incoming) = crossbeam_channel::unbounded();
+        let (outgoing, results) = crossbeam_channel::unbounded();
+        let (library, loaded) = Library::load(layout, &fallback);
+        let _ = outgoing.send(loaded);
+        Ok(Self {
+            commands,
+            results,
+            pending: 1,
+            inline: std::sync::Arc::new(std::sync::Mutex::new(Inline {
+                library,
+                incoming,
+                outgoing,
+            })),
+        })
+    }
+
+    /// Runs the queued jobs; an import first asks the page for files.
+    #[cfg(target_arch = "wasm32")]
+    fn run_inline(&self) {
+        let Ok(mut inline) = self.inline.lock() else {
+            return;
+        };
+        while let Ok(job) = inline.incoming.try_recv() {
+            match job {
+                Job::Import(None) => picker::pick_in_page(false, self.commands.clone()),
+                Job::ImportCape(None) => picker::pick_in_page(true, self.commands.clone()),
+                Job::Picked { cape, files } => {
+                    let outcome = match inline.library.stage_picked(cape, files) {
+                        Some(job) => inline.library.step(Some(job)),
+                        // A cancelled pick finishes its import without a change.
+                        None => inline.library.unchanged(),
+                    };
+                    crate::player_skin::files::clear_staged();
+                    let _ = inline.outgoing.send(outcome);
+                }
+                job => {
+                    let outcome = inline.library.step(Some(job));
+                    crate::player_skin::files::clear_staged();
+                    let _ = inline.outgoing.send(outcome);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Library {
+    /// Finishes a command that changed nothing.
+    fn unchanged(&self) -> Outcome {
+        let selected = self.view.selected_skin();
+        Outcome::new(
+            &self.view,
+            self.view.active_skin(),
+            selected.map(|entry| (entry.model, entry.engine_version.clone())),
+            self.uuid,
+            true,
+        )
+    }
+
+    /// Stages picked files where the importer reads them and returns the import of the main one:
+    /// a skin pack, else a PNG, whose geometry JSON beside it comes along; `None` when the player
+    /// picked nothing.
+    fn stage_picked(&mut self, cape: bool, files: Vec<(String, Vec<u8>)>) -> Option<Job> {
+        let dir = self.layout.dressing_room_dir().join("picked");
+        let mut main = None;
+        for (name, bytes) in files {
+            // Only the name's last component, so a picked name cannot point elsewhere.
+            let Some(name) = std::path::Path::new(&name).file_name() else {
+                continue;
+            };
+            let path = dir.join(name);
+            let rank = match path.extension().and_then(|extension| extension.to_str()) {
+                Some(extension) if extension.eq_ignore_ascii_case("mcpack") => 0,
+                Some(extension) if extension.eq_ignore_ascii_case("png") => 1,
+                _ => 2,
+            };
+            if main.as_ref().is_none_or(|(best, _)| rank < *best) {
+                main = Some((rank, path.clone()));
+            }
+            crate::player_skin::files::stage(path, bytes);
+        }
+        let (_, path) = main?;
+        Some(if cape {
+            Job::ImportCape(Some(path))
+        } else {
+            Job::Import(Some(path))
+        })
+    }
+}
+
+/// The browser worker's library and channel ends.
+#[cfg(target_arch = "wasm32")]
+struct Inline {
+    library: Library,
+    incoming: crossbeam_channel::Receiver<Job>,
+    outgoing: crossbeam_channel::Sender<Outcome>,
 }
 
 fn apply_job(layout: &InstallLayout, view: &mut DressingRoomView, job: Job) -> Result<(), String> {
@@ -181,6 +331,8 @@ fn apply_job(layout: &InstallLayout, view: &mut DressingRoomView, job: Job) -> R
         Job::ImportCape(Some(path)) => catalog::import_cape(layout, view, &path),
         Job::RenameCape(index, name) => catalog::rename_cape(layout, view, index, &name),
         Job::DeleteCape(index) => catalog::delete_cape(layout, view, index),
+        #[cfg(target_arch = "wasm32")]
+        Job::Picked { .. } => Ok(()),
     }
 }
 
@@ -289,6 +441,8 @@ impl MenuRuntime {
         session: u64,
     ) {
         if let Some(worker) = self.dressing_room_worker.as_mut() {
+            #[cfg(target_arch = "wasm32")]
+            worker.run_inline();
             while let Ok(mut result) = worker.results.try_recv() {
                 if result.completed_command {
                     worker.pending = worker.pending.saturating_sub(1);

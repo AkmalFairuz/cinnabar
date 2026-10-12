@@ -114,7 +114,7 @@ pub fn refresh(layout: &InstallLayout) {
                 let Some(parent) = path.parent() else {
                     return;
                 };
-                if fs::create_dir_all(parent).is_err() {
+                if files::create_dir_all(parent).is_err() {
                     return;
                 }
                 static NEXT_FILE: std::sync::atomic::AtomicU64 =
@@ -124,10 +124,10 @@ pub fn refresh(layout: &InstallLayout) {
                     "{}.{nonce}.tmp",
                     launcher::install_layout::process_id()
                 ));
-                if fs::write(&temp, bytes).is_ok() {
-                    let _ = fs::rename(&temp, &path);
+                if files::write(&temp, &bytes).is_ok() {
+                    let _ = files::rename(&temp, &path);
                 }
-                let _ = fs::remove_file(temp);
+                let _ = files::remove_file(&temp);
             });
         }
         while jobs.join_next().await.is_some() {}

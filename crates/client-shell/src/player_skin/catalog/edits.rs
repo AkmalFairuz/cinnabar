@@ -65,7 +65,7 @@ pub fn delete(
     next.skins = skins.into();
     commit_deletion(layout, view, next, &path, remove_image)?;
     if remove_image {
-        match fs::remove_file(path.with_extension("json")) {
+        match files::remove_file(&path.with_extension("json")) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => bevy::log::warn!(?error, "deleted imported model cleanup failed"),
@@ -86,7 +86,7 @@ pub(super) fn commit_deletion(
         launcher::install_layout::process_id()
     ));
     let moved = if remove_image {
-        match fs::rename(path, &tombstone) {
+        match files::rename(path, &tombstone) {
             Ok(()) => true,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
             Err(error) => return Err(format!("The imported image could not be removed: {error}")),
@@ -96,11 +96,11 @@ pub(super) fn commit_deletion(
     };
     if let Err(error) = save(layout, &next) {
         if moved {
-            let _ = fs::rename(&tombstone, path);
+            let _ = files::rename(&tombstone, path);
         }
         return Err(error);
     }
-    if moved && let Err(error) = fs::remove_file(tombstone) {
+    if moved && let Err(error) = files::remove_file(&tombstone) {
         bevy::log::warn!(?error, "deleted imported image cleanup failed");
     }
     *view = next;

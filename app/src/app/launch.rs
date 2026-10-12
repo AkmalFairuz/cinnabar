@@ -182,10 +182,13 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
     let font_dir = loaded_assets.selected_path.parent();
     let font_runtime = oreui_fonts::install(font_runtime, font_dir.unwrap_or(Path::new(".")));
     // Every carrier is decoded now; a browser keeps in memory only the languages a player can
-    // still switch to.
+    // still switch to and the starter skins the Dressing Room reads when it opens.
     let language_dir =
         assets::carriers::startup::language_carrier_dir(&loaded_assets.selected_path);
-    assets::carriers::file::release_preloaded(|path| path.starts_with(&language_dir));
+    let starter_skins = layout.starter_skins_asset();
+    assets::carriers::file::release_preloaded(|path| {
+        path.starts_with(&language_dir) || path == starter_skins
+    });
     let mut ui_presentation = UiPresentationRuntime::with_hud_and_icons(
         font_runtime,
         hud_assets.into_runtime(),

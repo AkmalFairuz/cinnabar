@@ -15,7 +15,10 @@ const SOUND_INDEX_CACHE = "cinnabar-sound-index";
 // repeat Play reuses unchanged files instead of downloading them again.
 const ASSET_CACHE = "cinnabar-assets";
 
-import { acceptDroppedPacks, installPackStore } from "./packs.js";
+import { acceptDroppedPacks, installPackStore, pick } from "./packs.js";
+
+// The Dressing Room imports skins and capes through the page's file picker.
+globalThis.cinnabarPickFiles = (extensions) => pick(extensions);
 
 // The client downloads only once the player agrees.
 let clientLoad = null;

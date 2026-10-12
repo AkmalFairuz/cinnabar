@@ -31,12 +31,12 @@ pub fn import(
             source.to_owned()
         };
         let geometry_paths = [png.with_extension("json"), png.with_extension("geo.json")];
-        let paths: Vec<_> = geometry_paths.iter().filter(|path| path.exists()).collect();
+        let paths: Vec<_> = geometry_paths.iter().filter(|path| files::exists(path)).collect();
         if paths.len() > 1 {
             return Err("The skin has multiple geometry files. Keep one matching JSON file or import a skin pack.".to_owned());
         }
         let geometry_path = paths.first().copied().unwrap_or(&geometry_paths[0]);
-        let geometry = if geometry_path.exists() {
+        let geometry = if files::exists(geometry_path) {
             Some(
                 skin_import::parse_skin_geometry(
                     &read_bounded(
@@ -115,7 +115,7 @@ pub fn import(
                     "The skin library already contains {MAX_IMPORTED_ITEMS} imported skins."
                 ));
             }
-            fs::create_dir_all(layout.dressing_room_dir()).map_err(|error| error.to_string())?;
+            files::create_dir_all(layout.dressing_room_dir()).map_err(|error| error.to_string())?;
             let path = layout.dressing_room_dir().join(format!("{digest}.png"));
             write_new(&path, &input.png, &mut files)?;
             if input.model == SkinModel::Custom {
@@ -143,7 +143,7 @@ pub fn import(
     })();
     if result.is_err() {
         for path in files {
-            let _ = fs::remove_file(path);
+            let _ = files::remove_file(&path);
         }
     } else {
         *view = next;
@@ -153,15 +153,10 @@ pub fn import(
 
 /// Tracks only newly created immutable files, so rollback cannot delete an older import.
 fn write_new(path: &Path, bytes: &[u8], files: &mut Vec<PathBuf>) -> Result<(), String> {
-    use std::io::Write;
-    match fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-    {
-        Ok(mut file) => {
+    match files::write_new(path, bytes) {
+        Ok(()) => {
             files.push(path.to_owned());
-            file.write_all(bytes).map_err(|error| error.to_string())
+            Ok(())
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
             if read_bounded(path, bytes.len() as u64)? == bytes {
