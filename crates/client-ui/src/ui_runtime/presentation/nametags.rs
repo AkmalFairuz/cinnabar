@@ -37,6 +37,8 @@ const SCORE_DISTANCE_SQUARED: f32 = 100.0;
 pub(super) const EXTRA_LINE_LIFT: f32 = 0.125;
 pub(super) const PLATE_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.25];
 const SNEAK_TEXT_ALPHA: f32 = 0.125;
+/// Each rendered line uses at most one background record and one text record.
+const NAMETAG_RECORDS_PER_LINE: usize = 2;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NametagAnchor {
@@ -213,7 +215,13 @@ pub fn build_nametag_scene<'p>(
             .then(b.distance.total_cmp(&a.distance))
             .then(a.runtime_id.cmp(&b.runtime_id))
     });
-    if !atlas.has_room_for(ordered.iter().map(|anchor| anchor.lines.len()).sum()) {
+    let line_budget = MAX_NAMETAG_RECORDS / NAMETAG_RECORDS_PER_LINE;
+    let requested_lines = ordered
+        .iter()
+        .map(|anchor| anchor.lines.len())
+        .sum::<usize>()
+        .min(line_budget);
+    if !atlas.has_room_for(requested_lines) {
         atlas.reset();
     }
     let side = NAMETAG_ATLAS_SIDE as f32;
@@ -221,12 +229,14 @@ pub fn build_nametag_scene<'p>(
     let mut records = Vec::new();
     let mut see_through = 0;
     for anchor in ordered {
+        let remaining_lines = (MAX_NAMETAG_RECORDS - records.len()) / NAMETAG_RECORDS_PER_LINE;
         let placed: Vec<_> = anchor
             .lines
             .iter()
+            .take(remaining_lines)
             .filter_map(|line| atlas.line(line, font, layouts, pages))
             .collect();
-        if placed.is_empty() || records.len() + 2 * placed.len() > MAX_NAMETAG_RECORDS {
+        if placed.is_empty() {
             continue;
         }
         let common = NametagRecord {

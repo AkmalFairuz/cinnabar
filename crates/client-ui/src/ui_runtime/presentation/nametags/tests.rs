@@ -141,6 +141,52 @@ fn multiline_lines_get_their_own_centred_backgrounds_before_their_glyphs() {
 }
 
 #[test]
+fn oversized_tags_render_a_prefix_within_the_scene_budget() {
+    let line_budget = MAX_NAMETAG_RECORDS / NAMETAG_RECORDS_PER_LINE;
+    let tag = anchor(&"A\n".repeat(line_budget + 1));
+    let scene = scene(&[tag]);
+    assert!(!scene.records.is_empty());
+    assert!(scene.records.len() <= MAX_NAMETAG_RECORDS);
+    assert_eq!(scene.records.len(), line_budget * NAMETAG_RECORDS_PER_LINE);
+    assert_eq!(
+        scene
+            .records
+            .iter()
+            .filter(|record| record.text == 1)
+            .count(),
+        line_budget
+    );
+    assert_eq!(scene.see_through, scene.records.len());
+    assert!(
+        scene
+            .records
+            .iter()
+            .all(|record| record.line_lift == EXTRA_LINE_LIFT * (line_budget - 1) as f32)
+    );
+}
+
+#[test]
+fn oversized_tags_use_the_budget_left_by_earlier_tags() {
+    let mut first = anchor("AB");
+    first.position.x = 1.0;
+    let remaining_lines = MAX_NAMETAG_RECORDS / NAMETAG_RECORDS_PER_LINE - 1;
+    let mut oversized = anchor(&"A\n".repeat(remaining_lines + 2));
+    oversized.position.x = 2.0;
+    oversized.depth_tested = true;
+    let scene = scene(&[oversized, first]);
+    assert_eq!(scene.records.len(), MAX_NAMETAG_RECORDS);
+    assert_eq!(scene.see_through, NAMETAG_RECORDS_PER_LINE);
+    assert_eq!(
+        scene
+            .records
+            .iter()
+            .filter(|record| record.anchor[0] == 2.0 && record.text == 1)
+            .count(),
+        remaining_lines
+    );
+}
+
+#[test]
 fn sneaking_preserves_plate_opacity_and_selects_tested_glyphs() {
     let mut anchor = anchor("AB");
     anchor.depth_tested = true;
