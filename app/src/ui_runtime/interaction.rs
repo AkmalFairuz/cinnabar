@@ -4,6 +4,7 @@ mod chat;
 mod chat_coordinates;
 pub(crate) mod chat_modifiers;
 pub(super) mod command_macros;
+mod drop_swing;
 pub(crate) mod input_capture;
 mod inventory;
 pub(crate) use chat::drive_chat_ui_actions;
@@ -48,6 +49,7 @@ use client_ui::ui_runtime::interaction::{
     ChatFlushError, PointerRouter, PressRoute, dispatch_chat_ui_action, dispatch_inventory_hotbar,
     flush_chat_sends, flush_inventory_send, is_chat_edit_shortcut, paste_chat_shortcut,
 };
+use drop_swing::DropSwing;
 use input_capture::{
     ordered_pointer_presses, restore_gameplay_input_after_chat, suppress_gameplay_input_for_chat,
     suppress_gameplay_input_for_inventory,
@@ -344,58 +346,6 @@ pub(crate) fn drive_world_inventory_keys(
         .is_ok()
     {
         swing.swing(&player_runtime);
-    }
-}
-
-/// What dropping the held item needs to swing the arm, as vanilla does with a `dropitem` swing.
-#[derive(bevy::ecs::system::SystemParam)]
-pub(crate) struct DropSwing<'w> {
-    swings: Option<ResMut<'w, client_interaction::melee::SwingTracker>>,
-    movement: Option<Res<'w, client_interaction::movement::MovementTicker>>,
-    effects: Option<Res<'w, client_interaction::movement::LocalMovementEffectTimeline>>,
-    network: Option<
-        Res<
-            'w,
-            client_runtime::network::NetworkHandle<
-                crate::runtime::network::resource_packs::PackApplication,
-            >,
-        >,
-    >,
-    client_world: Option<Res<'w, crate::runtime::world::ClientWorld>>,
-}
-
-impl DropSwing<'_> {
-    /// Swings the local arm for the tick about to simulate and tells the server, unless a swing
-    /// is already running.
-    fn swing(mut self, player_runtime: &client_state::PlayerRuntime) {
-        let (Some(swings), Some(movement), Some(effects), Some(network), Some(client_world)) = (
-            self.swings.as_deref_mut(),
-            self.movement.as_deref(),
-            self.effects.as_deref(),
-            self.network.as_deref(),
-            self.client_world.as_deref(),
-        ) else {
-            return;
-        };
-        let (Some(state), Some(stream)) = (movement.build_action_state(), &client_world.stream)
-        else {
-            return;
-        };
-        let item_duration = crate::melee::selected_attack_timing(player_runtime, client_world)
-            .and_then(|timing| timing.swing_duration_ticks);
-        if inventory::swing_before_tick(
-            swings,
-            movement.interaction_authority_identity(),
-            movement.completed_tick(),
-            effects,
-            item_duration,
-            state.tick.saturating_add(1),
-        ) {
-            let _ = network.send_inventory_packet(protocol::swing_arm_packet(
-                stream.local_player_runtime_id(),
-                protocol::SwingSource::DropItem,
-            ));
-        }
     }
 }
 
