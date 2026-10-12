@@ -5,26 +5,25 @@ use std::{collections::BTreeMap, io::Read, path::Path, sync::Arc};
 use assets::{FontRendering, RuntimeFontCatalog};
 
 use assets::carriers;
+use assets::carriers::startup::{join, start};
 use ui::oreui_theme::OreUiFont;
 
 /// Attaches valid optional face bundles, retaining the default font for unavailable faces.
 /// Faces map only their own ranges, so none attach without the shared Sans fallback.
 pub fn install(base: Arc<RuntimeFontCatalog>, compiled_dir: &Path) -> Arc<RuntimeFontCatalog> {
     let mut combined = (*base).clone();
-    // Faces decode concurrently but attach in `ALL` order, keeping page indices deterministic.
+    // Faces decode concurrently but attach in `ALL` order, keeping page indices deterministic; a
+    // browser, which cannot start threads, decodes them in turn.
     let (fallback, loaded) = std::thread::scope(|scope| {
         let loads = OreUiFont::ALL.map(|face| {
             let path = compiled_dir.join(face.carrier().output);
-            scope.spawn(move || {
+            start(scope, move || {
                 let font = load(face, &path);
                 (face, path, font)
             })
         });
         let fallback = shared_fallback(&mut combined, compiled_dir);
-        let loaded = loads.map(|load| {
-            load.join()
-                .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-        });
+        let loaded = loads.map(join);
         (fallback, loaded)
     });
     let fallback = match fallback {
