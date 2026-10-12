@@ -121,6 +121,7 @@ struct VisualCompiler {
     vine_templates: BTreeMap<[u32; 2], u32>,
     multiface_templates: BTreeMap<[u32; 3], u32>,
     cuboid_templates: BTreeMap<CuboidTemplateKey, u32>,
+    trapdoor_templates: BTreeMap<super::trapdoor::TemplateKey, u32>,
     wall_templates: BTreeMap<[u32; 7], u32>,
     pressure_plate_templates: BTreeMap<PressurePlateTemplateKey, u32>,
     button_templates: BTreeMap<ButtonTemplateKey, u32>,
@@ -438,6 +439,15 @@ impl VisualCompiler {
                 quads: &mut self.model_quads,
             },
         ));
+        ordered_rule!(super::trapdoor::compile_rule(
+            record,
+            inputs,
+            &mut self.trapdoor_templates,
+            &mut ModelStorage {
+                templates: &mut self.model_templates,
+                quads: &mut self.model_quads,
+            },
+        ));
         ordered_rule!(super::doors::compile_rule(
             record,
             inputs,
@@ -725,6 +735,7 @@ mod tests {
 
     fn synthetic_record(name: &str, state: &str, id: u32, hash: u32) -> RegistryRecord {
         RegistryRecord {
+            beacon_tint: assets::BeaconTint::Unresolved,
             sequential_id: id,
             network_hash: hash,
             name: name.into(),

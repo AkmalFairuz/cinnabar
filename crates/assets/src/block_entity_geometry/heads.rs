@@ -302,6 +302,7 @@ mod tests {
         cubes: Vec<EntityGeometryCube>,
     ) -> EntityGeometryBone {
         EntityGeometryBone {
+            locators: Box::default(),
             name: name.into(),
             binding: None,
             texture_meshes: Box::new([]),

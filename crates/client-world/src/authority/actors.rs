@@ -1,4 +1,5 @@
 use super::*;
+use simulation_clock::identity::{PositionAuthorityGeneration, SessionGeneration};
 
 impl WorldAuthority {
     /// Admits and polls appearance work without advancing animation ticks; true while work remains.
@@ -60,6 +61,10 @@ impl WorldAuthority {
         stack: &protocol::NetworkItemStack,
     ) -> Option<crate::item::CanonicalItemStack> {
         self.actors.canonical_item_stack(stack)
+    }
+    /// Reads intrinsic shine admitted for the current numeric item identity.
+    pub fn item_glint(&self, network_id: i32) -> assets::item::glint::ItemGlint {
+        self.actors.item_glint(network_id)
     }
     /// The item identifier registered for a network id.
     pub fn item_identifier(&self, network_id: i32) -> Option<std::sync::Arc<str>> {
@@ -152,6 +157,16 @@ impl WorldAuthority {
     ) -> impl Iterator<Item = crate::ActorShadowCaster> + '_ {
         self.actors.shadow_casters(partial_tick)
     }
+    /// Samples one actor's shadow volume source at the render frame's interpolation fraction.
+    pub fn actor_shadow_caster(
+        &self,
+        runtime_id: u64,
+        partial_tick: f32,
+    ) -> Option<crate::ActorShadowCaster> {
+        self.actors
+            .shadow_caster(self.actors.get(runtime_id)?, partial_tick)
+    }
+
     /// Sets the view `[pitch, yaw]` (degrees) that camera-facing billboard rigs sample per tick.
     pub fn set_actor_camera_rotation(&mut self, rotation: [f32; 2]) {
         self.actors.set_camera_rotation(rotation);
@@ -192,14 +207,17 @@ impl WorldAuthority {
         self.actors.start_swing(self.local_player_runtime_id, ticks);
     }
     /// Binds the local Java torso to the current simulation; `None` restores actor-clock motion.
-    pub fn set_local_motion_authority(&mut self, authority: Option<(u64, u64)>) {
+    pub fn set_local_motion_authority(
+        &mut self,
+        authority: Option<(SessionGeneration, PositionAuthorityGeneration)>,
+    ) {
         self.actors
             .set_local_motion_authority(self.local_player_runtime_id, authority);
     }
     /// Applies completed local torso samples without advancing other actor motion or clocks.
     pub fn sync_local_swing_motion(
         &mut self,
-        authority: (u64, u64),
+        authority: (SessionGeneration, PositionAuthorityGeneration),
         samples: impl IntoIterator<Item = actor_animation::LocalSwingMotionSample>,
     ) {
         self.actors

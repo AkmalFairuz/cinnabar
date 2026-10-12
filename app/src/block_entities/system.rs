@@ -45,12 +45,17 @@ const TEXT_CACHE_ENTRIES: usize = 256;
 const TEXT_CACHE_BYTES: usize = 2 * 1024 * 1024;
 
 mod beacon;
+#[cfg(test)]
+mod beacon_tests;
 mod bed;
 mod columns;
 mod crystal_beams;
 mod culling;
 mod dragon_death;
 mod portals;
+
+#[cfg(test)]
+mod beacon_tint_tests;
 
 /// Reads the optional block-entity carrier next to the world carrier, which the block-entity
 /// scene and worn heads share; on absence or corruption logs once and returns `None`.
@@ -112,6 +117,7 @@ struct BlockInfo {
 #[derive(Resource)]
 pub(crate) struct BlockEntityRuntime {
     lids: ContainerLids,
+    beacon_tints: assets::BeaconTintCatalog,
     /// Scan results per loaded column, rebuilt when the column changes.
     columns: HashMap<ChunkKey, columns::ColumnScan>,
     rescans: columns::RescanOrder,
@@ -126,12 +132,14 @@ pub(crate) struct BlockEntityRuntime {
     map_requests: HashMap<i64, f64>,
     /// Session and dimension the runtime-id keyed caches were filled from.
     session: Option<(u64, i32)>,
+    beam_source: Option<(Arc<assets::RuntimeAssets>, Option<protocol::DimensionRange>)>,
 }
 
 impl BlockEntityRuntime {
     pub(crate) fn new() -> Self {
         Self {
             lids: ContainerLids::default(),
+            beacon_tints: assets::BeaconTintCatalog::pinned(),
             columns: HashMap::new(),
             rescans: columns::RescanOrder::default(),
             frame: 0,
@@ -142,6 +150,26 @@ impl BlockEntityRuntime {
             missing_maps: Vec::new(),
             map_requests: HashMap::new(),
             session: None,
+            beam_source: None,
+        }
+    }
+
+    /// Invalidates cached column rules when pack light data or dimension height changes.
+    fn bind_beam_source(
+        &mut self,
+        assets: &Arc<assets::RuntimeAssets>,
+        range: Option<protocol::DimensionRange>,
+    ) {
+        if !self
+            .beam_source
+            .as_ref()
+            .is_some_and(|(previous, previous_range)| {
+                Arc::ptr_eq(previous, assets) && *previous_range == range
+            })
+        {
+            self.beam_source = Some((Arc::clone(assets), range));
+            self.columns.clear();
+            self.blocks.clear();
         }
     }
 
@@ -152,6 +180,7 @@ impl BlockEntityRuntime {
             return;
         }
         self.session = session;
+        self.beam_source = None;
         self.lids = ContainerLids::default();
         self.missing_maps.clear();
         self.columns.clear();
@@ -315,8 +344,17 @@ pub(crate) fn update_block_entity_scene(
         stream.authority().actor_session_id(),
         stream.current_dimension(),
     )));
+    runtime.bind_beam_source(
+        stream.runtime_assets(),
+        stream
+            .authority()
+            .dimension_range(stream.current_dimension()),
+    );
     runtime.missing_maps.clear();
     let dimension = stream.current_dimension();
+    let beam_top = stream.authority().dimension_range(dimension).map(|range| {
+        (range.base_sub_chunk_y + range.sub_chunk_count as i32) * SUB_CHUNK_SIDE as i32
+    });
     let store = stream.collision_store();
     let mode = stream.network_id_mode();
     let eye = view.eye_translation();
@@ -338,6 +376,17 @@ pub(crate) fn update_block_entity_scene(
             )
         });
     let mut work = culling::BlockEntityWork::default();
+    let mut occlusion_budget = meshing::occlusion::OcclusionBudget::default();
+    let occlusion_eye = camera.single().ok().and_then(|(transform, projection)| {
+        let eye = transform.translation.to_array();
+        let matrix = projection.get_clip_from_view() * transform.to_matrix().inverse();
+        render_model::visibility_bounds::perspective_supports_occlusion(
+            matrix,
+            eye,
+            f64::from(meshing::occlusion::OCCLUSION_EYE_GAP_BLOCKS),
+        )
+        .then_some(eye)
+    });
 
     let cracks = ui
         .block_crack_snapshot()
@@ -411,7 +460,11 @@ pub(crate) fn update_block_entity_scene(
                 continue;
             };
             scan.seen_frame = frame_stamp;
+            let before_portals = submissions.len();
             portals::submit(&mut submissions, &scan.portals, eye);
+            let portals = (submissions.len() - before_portals) as u32;
+            work.candidates += portals;
+            work.prepared += portals;
             let mut full = false;
             for entity in &scan.entities {
                 if submissions.len() >= MAX_SUBMISSIONS {
@@ -427,7 +480,22 @@ pub(crate) fn update_block_entity_scene(
                     continue;
                 }
                 // Hidden entities skip geometry but keep lids, rings, map requests and canvases.
-                let hidden = !work.admit(culling.as_ref(), template, [x, y, z]);
+                let mut hidden = !work.admit(culling.as_ref(), template, [x, y, z]);
+                if !hidden
+                    && let Some((low, high)) = culling::bounds(template, [x, y, z])
+                    && let Some(eye) = occlusion_eye
+                    && let Some(cave) = cave.as_deref()
+                {
+                    let _zone = bevy::log::info_span!("block_entity.occlusion").entered();
+                    hidden = stream.terrain_hides_box(
+                        &mut occlusion_budget,
+                        eye,
+                        low,
+                        high,
+                        |_, key| cave.is_visible(key) && cave.rendered.contains_key(&key),
+                    );
+                    work.prepared -= u32::from(hidden);
+                }
                 let context = FrameContext {
                     stream,
                     collisions: &collisions,
@@ -437,14 +505,21 @@ pub(crate) fn update_block_entity_scene(
                     font: &font.0,
                 };
                 let kind = if matches!(template, Template::Beacon) {
-                    beacon::kind(
-                        &mut *runtime,
-                        &collisions,
-                        store,
-                        dimension,
-                        mode,
-                        [x, y, z],
-                    )
+                    beam_top.map(|top| {
+                        let model = scan.beacons.entry(entity.key).or_insert_with(|| {
+                            beacon::model(
+                                runtime,
+                                &collisions,
+                                stream.runtime_assets(),
+                                store,
+                                dimension,
+                                mode,
+                                [x, y, z],
+                                top,
+                            )
+                        });
+                        BlockEntityKind::Beacon(model.clone())
+                    })
                 } else {
                     resolve(
                         template,
@@ -496,6 +571,7 @@ pub(crate) fn update_block_entity_scene(
             .filter(|cue| cue.event_type == BELL_RING_EVENT_TYPE)
             .map(|cue| cue.sequence)
     });
+    let before_global = submissions.len();
     crystal_beams::submit(
         &mut submissions,
         stream.authority().crystal_beams(actor_partial_tick.0),
@@ -514,12 +590,17 @@ pub(crate) fn update_block_entity_scene(
             stream.solved_light_at(actor.brightness_sample_position(owner_position))
         },
     );
+    let global = (submissions.len() - before_global) as u32;
+    work.candidates += global;
+    work.prepared += global;
     placements.0.0 = held;
     let _zone = bevy::log::info_span!(
         "block_entity.scene_update",
         candidates = work.candidates,
         prepared = work.prepared,
-        submissions = submissions.len()
+        hidden_by_occlusion = work.candidates - work.prepared,
+        probes = meshing::occlusion::ENTITY_OCCLUSION_PROBES - occlusion_budget.remaining(),
+        submitted = submissions.len()
     )
     .entered();
     frame.0 = scene.update(clock, &cracks, &submissions).clone();
@@ -825,113 +906,5 @@ fn prune_bell_rings(
 mod resolve_tests;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn review_first_bell_cue_starts_once() {
-        let mut rings = HashMap::new();
-        assert_eq!(bell_elapsed(&mut rings, [0; 3], Some(7), 100.0), 0.0);
-        prune_bell_rings(&mut rings, 120.0, |_| Some(7));
-        assert_eq!(bell_elapsed(&mut rings, [0; 3], Some(7), 120.0), 20.0);
-        assert_eq!(bell_elapsed(&mut rings, [0; 3], Some(8), 121.0), 0.0);
-    }
-
-    #[test]
-    fn review_session_changes_reset_container_animation() {
-        let mut runtime = BlockEntityRuntime::new();
-        runtime.bind_session(Some((1, 0)));
-        runtime
-            .lids
-            .advance([0; 3], ContainerKind::Chest, true, 1.0);
-        runtime.bind_session(Some((2, 0)));
-        assert_eq!(
-            runtime
-                .lids
-                .advance([0; 3], ContainerKind::Chest, false, 0.05),
-            0.0
-        );
-    }
-
-    #[test]
-    fn light_follows_the_terrain_curve_and_night_transfer_floor() {
-        assert!((light_factor(15, 0, 0.0) - 1.0).abs() < 1.0e-6);
-        assert!((light_factor(0, 15, 1.0) - 1.0).abs() < 1.0e-6);
-        // Full sky light at night is throttled to the transfer floor.
-        assert!((light_factor(0, 15, 0.0) - NIGHT_SKY_TRANSFER_FLOOR).abs() < 1.0e-6);
-        assert_eq!(light_factor(0, 0, 1.0), 0.0);
-        assert!(light_factor(8, 0, 1.0) > light_factor(4, 0, 1.0));
-    }
-
-    #[test]
-    fn placed_player_skulls_keep_native_light_coordinates_for_the_environment_shader() {
-        let kind = BlockEntityKind::Skull(render_model::SkullModel {
-            kind: render_model::SkullKind::Player,
-            mount: render_model::SkullMount::Floor {
-                rotation_degrees: 0.0,
-            },
-        });
-        for (block, sky) in [(0, 0), (0, 15), (12, 0)] {
-            for daylight in [0.0, 1.0] {
-                assert_eq!(
-                    model_light(&kind, block, sky, daylight),
-                    BlockEntityLight::Actor { block, sky }
-                );
-            }
-        }
-        assert_eq!(
-            model_light(&BlockEntityKind::EndPortal, 0, 15, 1.0),
-            1.0.into()
-        );
-    }
-
-    #[test]
-    fn the_viewer_yaw_turns_the_model_front_toward_the_eye() {
-        // An eye due north of the block needs no turn; due east needs a quarter turn.
-        assert!(yaw_toward(Vec3::new(0.5, 0.0, -5.0), [0, 0, 0]).abs() < 1.0e-3);
-        let east = yaw_toward(Vec3::new(5.5, 0.0, 0.5), [0, 0, 0]);
-        let front = Mat4::from_rotation_y(east.to_radians()).transform_vector3(Vec3::NEG_Z);
-        assert!(front.abs_diff_eq(Vec3::X, 1.0e-4));
-    }
-
-    #[test]
-    fn map_pixels_unpack_red_first_and_keys_track_revisions() {
-        assert_eq!(map_canvas(&[0x4433_2211]), vec![0x11, 0x22, 0x33, 0x44]);
-        assert_ne!(map_cache_key(1, 1), map_cache_key(1, 2));
-        assert_ne!(map_cache_key(1, 1), map_cache_key(2, 1));
-        assert_eq!(map_cache_key(5, 9), map_cache_key(5, 9));
-    }
-
-    /// Bell state must not accumulate for every bell ever seen.
-    #[test]
-    fn bell_ring_state_expires_once_the_swing_settles() {
-        let mut rings = HashMap::from([
-            ([0, 0, 0], (1, 100.0)),
-            ([1, 0, 0], (2, f64::NEG_INFINITY)),
-            ([2, 0, 0], (3, 80.0)),
-        ]);
-        prune_bell_rings(&mut rings, 101.0, |_| None);
-        assert_eq!(rings.keys().copied().collect::<Vec<_>>(), vec![[0, 0, 0]]);
-    }
-
-    /// A runtime id cached in one session must not resolve blocks in the next.
-    #[test]
-    fn session_change_drops_runtime_id_keyed_caches() {
-        let mut runtime = BlockEntityRuntime::new();
-        runtime.bind_session(Some((1, 0)));
-        runtime.blocks.insert(7, None);
-        crack_shape(
-            &mut runtime.shapes,
-            &Arc::new(assets::RuntimeAssets::diagnostic()),
-            assets::NetworkIdMode::Sequential,
-            Some(7),
-            [0; 3],
-        );
-        runtime.bell_rings.insert([0, 0, 0], (1, 0.0));
-        runtime.bind_session(Some((1, 0)));
-        assert_eq!(runtime.blocks.len(), 1);
-        runtime.bind_session(Some((2, 0)));
-        assert!(runtime.blocks.is_empty() && runtime.shapes.is_empty());
-        assert!(runtime.bell_rings.is_empty());
-    }
-}
+#[path = "system/tests.rs"]
+mod tests;
