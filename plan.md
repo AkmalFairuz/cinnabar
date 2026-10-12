@@ -2803,6 +2803,12 @@ texture, tint and sample point are unmatched), pack attachables (held/worn on pl
 (pack bindings win by item identifier; pack property defaults seed only from `entities/` in
 resource packs), rigs depending on vanilla clips are attributed as fallbacks; pack precedence follows the Bedrock stack (last entry wins). No vanilla acceptance gate is closed by this change.
 
+2026-10-12 protocol boundary: `protocol` exposes only Cinnabar-owned types: an opaque
+`Packet`, owned `GameData` startup facts, the login skin and version constants, the pack
+handoff, transfer and error types. Other crates' tests use `protocol::test_support`; wire-layout
+tests compile inside the crate. Valentine and Jolyne remain its codec and session layer, and the
+architecture gate rejects any other crate depending on them. Behaviour and parity are unchanged.
+
 2026-09-30 protocol-2193 wire target (owner decision): Cinnabar moves from
 Bedrock 1.26.44 / protocol 2168 to 1.26.50 / protocol 2193, because Gophertunnel
 `lunar` now supports only 1.26.50 (Mojang's current release is 1.26.52 on the
@@ -4750,6 +4756,9 @@ Scope: block registry + block-state → model/texture mapping (generated export 
       be regenerated. Residual names: `docs/phase-2-family-inventory.md`.
     - [ ] Coral fans compile spreading floor sprites and four wall mounting
       directions with replacement-pack artwork. Native-server placement and
+      rendered parity acceptance remain incomplete.
+    - [ ] Tripwire hooks compile separate mounts, pitched shafts, eyes and attached
+      string in every facing and signal state. Native-server placement and
       rendered parity acceptance remain incomplete.
     - [x] Round two: night light floors lowered to the night sky transfer,
       biome tints blend on a 4-block lattice (four taps per axis; vertical axis
@@ -7761,6 +7770,13 @@ numerical behavior; unclassified states remain unresolved and keep the previous 
 numerical defaults. No ordinary movement classification is inferred from absence of a special
 rule. Complete native ordinary/special coverage, custom session movement components and
 all provisional rule values still require verification before this gate can close.
+
+## Brewing stand models
+
+Brewing stands compile a central post, three feet and three bottle-selected radial panels
+from pack textures. All eight registered bottle combinations retain their own sprite
+regions. Exact server placement, native rendered comparison and broader lighting and
+performance parity remain incomplete.
 
 ## Compiled item armour
 
