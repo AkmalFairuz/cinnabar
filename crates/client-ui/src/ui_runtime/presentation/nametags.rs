@@ -12,6 +12,7 @@ use render_model::{
     nametag_line_backgrounds, nametag_line_left,
 };
 use ui::{FONT_DESIGN_PIXEL_TEXELS, TextLayoutCache};
+use ui_screens::text::bounded_text;
 
 use super::nametag_atlas::{GlyphPage, NametagAtlas};
 
@@ -142,7 +143,9 @@ pub fn extract_nametag(
         return None;
     }
     let text = tag_text(actor, name, distance_squared, scoreboards);
-    let lines: Vec<Arc<str>> = super::bounded_visible_text(&text)
+    // A tag holds several formatted lines, so it is bounded as the metadata string it came from
+    // rather than as one line of presented text.
+    let lines: Vec<Arc<str>> = bounded_text(&text, protocol::MAX_ACTOR_METADATA_STRING_BYTES)
         .split('\n')
         .filter(|line| !line.is_empty())
         .map(Arc::from)

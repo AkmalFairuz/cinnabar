@@ -360,3 +360,23 @@ fn replacement_and_default_text_opacity_preserve_native_coverage() {
     assert_eq!(scene.records[0].color, [1., 0., 0., 0.0625]);
     assert_eq!(scene.records[1].color, [0., 1., 0., 0.0625]);
 }
+
+#[test]
+fn long_formatted_server_tags_keep_every_line() {
+    let lines: Vec<String> = (0..40)
+        .map(|row| format!("§{}§lrow {row:02} §rof a long server tag", row % 10))
+        .collect();
+    let text = lines.join("\n");
+    assert!(text.len() > ui_screens::text::MAX_PRESENTED_TEXT_BYTES);
+    let anchor = extract_nametag(
+        &actor(),
+        Vec3::new(0.0, 1.62, 5.0),
+        None,
+        text.into(),
+        &ui::ScoreboardStore::default(),
+        0.5,
+    )
+    .unwrap();
+    let kept: Vec<&str> = anchor.lines.iter().map(|line| &**line).collect();
+    assert_eq!(kept, lines);
+}
