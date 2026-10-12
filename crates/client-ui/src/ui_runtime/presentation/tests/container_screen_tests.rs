@@ -9,7 +9,7 @@ use protocol::{
 use super::engine_hud_tests::engine_presentation_with;
 use super::*;
 pub(super) use crate::test_support::{creative_with, inventory_session as session};
-use crate::ui_runtime::presentation::inventory_pointer::InventoryCellHit;
+use ui_screens::container_actions::InventoryCellHit;
 
 mod furnace_fuel_tests;
 mod furnace_recipe_tests;
@@ -22,7 +22,7 @@ fn unknown_mount_window_does_not_draw_or_hit_equipment_cells() {
     let mut player_runtime = player_state::PlayerState::new(1);
     let runtime = opened(&mut player_runtime, protocol::WINDOW_TYPE_HORSE, 2);
     let mut presentation = UiPresentationRuntime::with_hud(
-        crate::test_support::fixture_font(),
+        ui_engine::test_support::fixture_font(),
         crate::test_support::fixture_hud(),
     )
     .unwrap();
@@ -203,11 +203,11 @@ fn screens() -> Vec<(
     UiRuntime,
     Vec<InventoryCellHit>,
 )> {
-    use crate::ui_runtime::presentation::screens::{ReaderButton as R, Widget as W};
     use InventoryCellHit::{
         Craft, CraftOutput, CreativeSearch, CreativeTab, RecipeBook, Storage, Widget,
     };
     use protocol::*;
+    use ui_screens::container_actions::{ReaderButton as R, Widget as W};
     let storage = |count: u8| (0..count).map(Storage).collect::<Vec<_>>();
     vec![
         screen(
@@ -263,7 +263,7 @@ fn screens() -> Vec<(
                 runtime.screen_state_mut().book_open = true;
                 runtime
                     .screen_state_mut()
-                    .select_tab(crate::ui_runtime::presentation::screens::SEARCH_TAB);
+                    .select_tab(ui_screens::container_actions::SEARCH_TAB);
                 runtime
             },
             vec![Widget(W::RecipeFilter), CreativeSearch],
@@ -484,7 +484,7 @@ fn every_container_screen_draws_through_the_engine() {
         let book = name.starts_with("book");
         let player = (0..if book { 0 } else { 36 }).map(InventoryCellHit::Player);
         let close = (!book).then_some(InventoryCellHit::Widget(
-            crate::ui_runtime::presentation::screens::Widget::Close,
+            ui_screens::container_actions::Widget::Close,
         ));
         for hit in expected.into_iter().chain(player).chain(close) {
             assert!(reached.contains(&hit), "{name}: {hit:?} unreachable");
@@ -522,7 +522,7 @@ fn furnace_recipe_layout_buttons_reach_the_screen_controller() {
     for layout in [1, 2] {
         assert!(
             reached.contains(&InventoryCellHit::Widget(
-                crate::ui_runtime::presentation::screens::Widget::InventoryLayout(layout)
+                ui_screens::container_actions::Widget::InventoryLayout(layout)
             )),
             "furnace layout {layout} must be reachable"
         );
@@ -536,7 +536,7 @@ fn crafter_slots_toggle_through_their_buttons() {
     let mut player_runtime = player_state::PlayerState::new(1);
 
     use crate::ui_runtime::inventory_drag::PointerAction;
-    use crate::ui_runtime::presentation::screens::Widget as W;
+    use ui_screens::container_actions::Widget as W;
     let Some(mut presentation) =
         engine_presentation_with(super::super::forms::pack_harness::font())
     else {
@@ -640,7 +640,7 @@ fn llama_equip_cell_addresses_the_carpet_slot() {
 fn creative_wide_layout_keeps_only_the_hotbar_under_the_catalog() {
     let mut player_runtime = player_state::PlayerState::new(1);
 
-    use crate::ui_runtime::presentation::screens::Widget as W;
+    use ui_screens::container_actions::Widget as W;
     let Some(mut presentation) =
         engine_presentation_with(super::super::forms::pack_harness::font())
     else {
@@ -993,7 +993,7 @@ fn bench_frames(default: u64) -> u64 {
 #[test]
 fn shift_clicking_the_close_button_closes_the_screen() {
     use crate::ui_runtime::inventory_drag::PointerAction;
-    use crate::ui_runtime::presentation::screens::Widget as W;
+    use ui_screens::container_actions::Widget as W;
     let mut player_runtime = player_state::PlayerState::new(1);
     let mut runtime = opened(&mut player_runtime, protocol::WINDOW_TYPE_FURNACE, 3);
     assert!(runtime.inventory_open());

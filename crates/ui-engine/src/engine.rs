@@ -17,9 +17,11 @@ use ui::{TextLayoutCache, TextShadow, UiNode, UiNodeId, UiPoint, UiRect, UiVisua
 
 use {crate::text_metrics::TextMetrics, ui::FONT_DESIGN_PIXEL_TEXELS};
 
+mod banner_renderer;
 mod fill_renderers;
 mod formatting_colors;
 pub mod host_edit;
+pub mod item_renderer;
 #[cfg(test)]
 mod ownership_tests;
 pub mod pack_catalog;
@@ -32,7 +34,7 @@ pub mod text_paint;
 mod vector_icons;
 use crate::atlas::ServerAtlas;
 use crate::frame::{EditText, EngineFrame};
-use crate::sources::RemoteSource;
+use crate::sources::{ImageWork, RemoteSource};
 use crate::textures::{TextureSet, Textures};
 use screen::{CustomDraw, CustomRenderer, PaintError, PaintFrame, ScreenRegistry};
 use text_paint::{Measure, TextPaint};
@@ -94,19 +96,20 @@ struct Art<'a> {
 
 impl FormEngine {
     /// An engine over `assets` and its `catalog` under the families `registry` records; URL
-    /// textures download through `remote`.
+    /// textures download through `remote`, and images read and decode as `work` allows.
     pub fn new(
         assets: Arc<RuntimeUiAssets>,
         mut catalog: Catalog,
         first_page: u16,
         registry: &'static ScreenRegistry,
         remote: Arc<dyn RemoteSource>,
+        work: ImageWork,
     ) -> Self {
         registry.catalog().extended(&mut catalog);
         let vanilla = Arc::new(catalog);
         let base = Arc::new(registry.catalog().builtin(&vanilla));
         Self {
-            textures: TextureSet::new(first_page, remote).with_carrier(Arc::clone(&assets)),
+            textures: TextureSet::new(first_page, remote, work).with_carrier(Arc::clone(&assets)),
             assets,
             catalog: Arc::clone(&base),
             formatting_palette: formatting_colors::from_catalog(&base),
@@ -463,6 +466,13 @@ fn render_with<R: Borrow<FormRender>>(
             paths.insert(path);
         });
     }
+    for node in laid() {
+        if let Draw::Custom { renderer, data } = &node.draw
+            && renderer == banner_renderer::RENDERER
+        {
+            paths.extend(banner_renderer::texture_paths(data));
+        }
+    }
     let drawn = Textures {
         assets: textures.assets,
         set: textures.set,
@@ -718,7 +728,8 @@ impl Canvas<'_> {
     }
 
     /// Hands `node` to the frame's renderers, then to the engine's own: vector icons, rounded
-    /// chrome, fills, messaging art, named profile images and name tags. Others draw nothing.
+    /// chrome, fills, messaging art, named profile images, name tags and banners. Others draw
+    /// nothing.
     fn custom(
         &mut self,
         node: &CustomDraw<'_>,
@@ -746,6 +757,10 @@ impl Canvas<'_> {
             "animated_gif_renderer" => self.animated_gif(data, dest, &alpha),
             "profile_image_renderer" => self.named_profile_image(data, dest, &alpha),
             "name_tag_renderer" => self.name_tag(data, dest, &alpha),
+            banner_renderer::RENDERER => {
+                self.banner_pattern(data, dest, &alpha)?;
+                None
+            }
             _ => None,
         };
         match drawn {
