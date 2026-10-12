@@ -47,7 +47,7 @@ pub fn spawn_network(
             login_settings: config.login_settings,
         },
         move |handoff, game_data, cancelled| {
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             let preparation =
                 pack_runtime::prepare_session_packs(handoff, game_data, physical_memory_bytes);
             if cancelled() {
