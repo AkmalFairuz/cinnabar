@@ -196,6 +196,18 @@ pub async fn fetch(
     Ok(bytes)
 }
 
+/// Always fails: browsers cannot pin the resolved public addresses or see the connected peer,
+/// so this fetch policy cannot be enforced there.
+#[cfg(target_arch = "wasm32")]
+pub async fn fetch(
+    _text: &str,
+    _origins: &BTreeSet<String>,
+    _expected_bytes: usize,
+    _range: Option<(u64, u64, u64)>,
+) -> Result<Vec<u8>> {
+    anyhow::bail!("server experience downloads are unavailable in the browser")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

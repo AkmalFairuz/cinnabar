@@ -1,7 +1,7 @@
 //! Optional Discord desktop activity, with all IPC owned by the RPC worker.
 
 mod join;
-// Discord runs beside the game, reached over local IPC browsers cannot open.
+// Browsers have no Discord desktop IPC; only the card's target types are shared there.
 #[cfg(not(target_arch = "wasm32"))]
 mod launch;
 #[cfg(not(target_arch = "wasm32"))]
@@ -80,6 +80,7 @@ pub struct Badge {
 
 #[cfg(not(target_arch = "wasm32"))]
 /// Discord rejects longer image keys and URLs.
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_IMAGE_BYTES: usize = 256;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -227,5 +228,5 @@ fn unix_seconds() -> u64 {
         .as_secs()
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests;

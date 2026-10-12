@@ -140,10 +140,6 @@ const URGENT_DISPATCH_BUDGET: usize = 4;
 /// Jobs a local block change may queue beyond full light or mesh workers, so streaming backlog
 /// cannot hold it back: enough for its section and a few neighbours its relight reaches.
 const URGENT_JOB_RESERVE: usize = 4;
-/// Time a browser's frame may spend running urgent jobs inline, at most half a 60 Hz frame; the
-/// rest of the chain runs ahead of the backlog in the next frame's job pass.
-#[cfg(target_arch = "wasm32")]
-const INLINE_URGENT_BUDGET: Duration = Duration::from_millis(8);
 /// Results one urgent pass may accept outside the poll.
 const URGENT_RESULTS_PER_PASS: usize = 16;
 /// Cooperative time for one urgent pass outside the poll, so it never sweeps a backlog.

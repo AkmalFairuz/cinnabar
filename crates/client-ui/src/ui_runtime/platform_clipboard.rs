@@ -13,8 +13,9 @@ pub enum PlatformClipboardError {
     #[cfg(not(target_arch = "wasm32"))]
     #[error("platform clipboard failed: {0}")]
     Platform(#[from] arboard::Error),
+    /// Browsers expose the clipboard only through asynchronous, permission-gated calls.
     #[cfg(target_arch = "wasm32")]
-    #[error("the clipboard is unavailable in a browser")]
+    #[error("platform clipboard is unavailable in the browser")]
     Unavailable,
     #[error("clipboard text exceeds the {maximum}-byte chat insertion bound")]
     TooLong { maximum: usize },
@@ -23,6 +24,7 @@ pub enum PlatformClipboardError {
 impl ChatClipboard for PlatformClipboard {
     type Error = PlatformClipboardError;
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn read_text_bounded(&mut self, maximum_bytes: usize) -> Result<Option<Arc<str>>, Self::Error> {
         #[cfg(target_arch = "wasm32")]
         {
@@ -40,9 +42,18 @@ impl ChatClipboard for PlatformClipboard {
             Ok(Some(Arc::from(text)))
         }
     }
+
+    #[cfg(target_arch = "wasm32")]
+    fn read_text_bounded(
+        &mut self,
+        _maximum_bytes: usize,
+    ) -> Result<Option<Arc<str>>, Self::Error> {
+        Err(PlatformClipboardError::Unavailable)
+    }
 }
 
 impl PlatformClipboard {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn write_text(&mut self, text: String) -> Result<(), PlatformClipboardError> {
         #[cfg(target_arch = "wasm32")]
         {
@@ -54,5 +65,10 @@ impl PlatformClipboard {
             arboard::Clipboard::new()?.set_text(text)?;
             Ok(())
         }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn write_text(&mut self, _text: String) -> Result<(), PlatformClipboardError> {
+        Err(PlatformClipboardError::Unavailable)
     }
 }

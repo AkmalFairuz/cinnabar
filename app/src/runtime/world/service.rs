@@ -9,7 +9,7 @@ use bevy::{
     app::App,
     prelude::{Res, ResMut},
 };
-use render::{ChunkUploadBudget, RuntimeStage, RuntimeStageProfiler};
+use render_scene::{ChunkUploadBudget, RuntimeStage, RuntimeStageProfiler};
 
 use super::{ClientWorld, WorldStreamFramePoll};
 use client_presentation::local_player::LocalViewPose;

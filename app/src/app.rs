@@ -27,31 +27,34 @@ use client_runtime::network::NetworkHandle;
 use client_state::ClientFrameSet;
 use launcher_host::core_process::{CoreProcessGuard, spawn_core_for_address, wait_for_core};
 use launcher_host::session_cleanup::reclaim_stale_session_directories;
-use render::{
-    ActorRenderPlugin, ActorRenderScene, AtmosphereFrame, AtmospherePlugin,
-    AtmosphereTextureAssets, ChunkRenderApplySet, ChunkRenderPlugin, ChunkTextureAssets,
-    RuntimeStageProfiler, UiRenderPlugin, VisibilityDiagnosticsInput,
-};
 use render_api::PublicationServiceConfig;
 #[cfg(test)]
 use std::fs;
-use std::{ffi::OsStr, io::Write, path::Path, sync::Arc};
+use std::io::Write;
+use std::{ffi::OsStr, path::Path, sync::Arc};
 #[cfg(feature = "acceptance")]
 use {
     crate::acceptance::{model_witness::drive_model_witness, world_ready::emit_world_ready},
     acceptance::transparent_witness::poll_transparent_witness_request,
 };
+use {
+    render::{ActorRenderPlugin, AtmospherePlugin, ChunkRenderPlugin, UiRenderPlugin},
+    render_scene::{
+        ActorRenderScene, AtmosphereFrame, AtmosphereTextureAssets, ChunkRenderApplySet,
+        ChunkTextureAssets, RuntimeStageProfiler, VisibilityDiagnosticsInput,
+    },
+};
 mod logging;
 mod startup;
 use startup::bind_direct_session_directory;
 
+use crate::runtime::telemetry::AcceptanceRuntimeConfig;
 use client_presentation::{
     actor_publication::publish_actor_render_frame,
     camera::FlyCameraUpdateSet,
     local_player::{LocalPlayerFrameSet, publish_interaction_origin},
 };
 use client_ui::ui_runtime::{UiRuntime, oreui_fonts, presentation::UiPresentationRuntime};
-use diagnostics::AcceptanceRuntimeConfig;
 use diagnostics::markers::SHUTDOWN_COMPLETED;
 use diagnostics::metrics::MetricsCollector;
 use launcher::install_layout::InstallLayout;

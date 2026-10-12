@@ -1,8 +1,9 @@
 //! Process lifecycle around the client: crash capture, first-run asset preparation, update checks.
 
+use anyhow::Result;
 #[cfg(not(target_arch = "wasm32"))]
 use {
-    anyhow::{Context, Result},
+    anyhow::Context,
     launcher::install_layout::InstallLayout,
     launcher_host::lifecycle::{crash, update},
 };
@@ -34,5 +35,11 @@ pub fn before_run(assets_overridden: bool) -> Result<bool> {
             notice.current
         );
     }
+    Ok(true)
+}
+
+/// Browsers have no packaged install to prepare, crash-capture or update.
+#[cfg(target_arch = "wasm32")]
+pub fn before_run(_assets_overridden: bool) -> Result<bool> {
     Ok(true)
 }

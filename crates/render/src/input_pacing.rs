@@ -17,6 +17,7 @@
     allow(dead_code, reason = "browsers never wait for frame admission")
 )]
 
+use bevy::prelude::IntoScheduleConfigs;
 mod frame_time;
 mod wait;
 
@@ -45,7 +46,7 @@ use bevy::{
 use render_model::{Cadence, FrameRate};
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::{RuntimeStage, RuntimeStageProfiler};
+use render_scene::{RuntimeStage, RuntimeStageProfiler};
 
 /// `0` keeps measuring input age but never delays an update for render completion.
 const PACING_ENV: &str = "RUST_MCBE_INPUT_PACING";

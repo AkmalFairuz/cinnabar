@@ -36,7 +36,7 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
         diagnostics::console::flush_before_exit();
     });
     UiRuntime::configure_crafting_observation(args.address.as_deref());
-    render::ViewmodelCompletionGate::configure_observation(args.address.as_deref());
+    render_scene::ViewmodelCompletionGate::configure_observation(args.address.as_deref());
     crate::startup_progress::report("Loading game files", None);
     let layout = InstallLayout::discover().context("resolve install and user runtime layout")?;
     let global_pack_root = layout.global_resource_packs_dir();
@@ -111,7 +111,8 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
     crate::runtime::network::set_vanilla_item_paths(&entity_runtime);
     let actor_catalog = actor_catalog.context("load exact entity-linked neutral actor artwork")?;
     let actor_artwork = crate::asset_bindings::actor_artwork(&actor_catalog, &entity_runtime);
-    let hand_geometry = render::ViewmodelGeometry::from_runtime(&entity_runtime, &actor_artwork);
+    let hand_geometry =
+        render_model::ViewmodelGeometry::from_runtime(&entity_runtime, &actor_artwork);
     let hud_assets = carriers
         .hud
         .context("load pinned official Mojang sample HUD carrier")?;
@@ -200,6 +201,7 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
     {
         diagnostics::log_stderr!("OreUI originals disabled ({reason})");
     }
+    let food_catalog = equipment_catalog.clone();
     ui_presentation.set_equipment_catalog(equipment_catalog);
     ui_presentation
         .set_gui_models(&loaded_assets.runtime, &entity_runtime)
@@ -435,13 +437,15 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
     .insert_resource(client_blob_cache)
     .insert_resource(network)
     .insert_resource(ResourcePackAdmissionState::default())
-    .insert_resource(actor_artwork)
+    .insert_resource(render_scene::ActorArtworkResource(actor_artwork))
     .insert_resource(ClientWorld::new_with_entity_assets(
         Arc::clone(&runtime_assets),
-        entity_runtime,
+        Arc::clone(&entity_runtime),
     ))
     .insert_resource({
         let mut ui_runtime = UiRuntime::new(0);
+        ui_runtime.set_item_fuel_catalog(Arc::clone(&entity_runtime));
+        ui_runtime.set_food_catalog(food_catalog);
         if let Some(address) = &args.address {
             ui_runtime.experiences.select_destination(address);
         }
@@ -513,7 +517,7 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
         },
     ))
     .insert_resource(DiagnosticQuads::default())
-    .insert_resource(block_entity_scene)
+    .insert_resource(render_scene::BlockEntitySceneResource(block_entity_scene))
     .insert_resource(PublicationController::new(
         PublicationServiceConfig::PHASE2_GATE,
     ));
@@ -527,27 +531,27 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
         model_witness_request: args.model_witness_request,
     });
     {
-        const MAIN_FRAME: usize = render::RuntimeStage::MainFrame as usize;
+        const MAIN_FRAME: usize = render_scene::RuntimeStage::MainFrame as usize;
         app.insert_resource(RuntimeStageProfiler::for_gameplay(
             stage_profile_enabled,
             std::env::var_os(diagnostics::markers::STAGE_PROFILE_FRAMES)
                 .map(std::path::PathBuf::from),
         ))
-        .init_resource::<render::RuntimeStageSpans>()
+        .init_resource::<render_scene::RuntimeStageSpans>()
         .add_plugins(render::GpuTimingPlugin)
         .add_systems(
             render::FrameStart,
             (
                 crate::runtime::frame_profile::track_frame_interval,
                 crate::runtime::frame_profile::trace_frame_focus,
-                render::begin_stage_span::<MAIN_FRAME>,
+                render_scene::begin_stage_span::<MAIN_FRAME>,
             )
                 .chain(),
         )
         .add_systems(
             Last,
             (
-                render::end_stage_span::<MAIN_FRAME>,
+                render_scene::end_stage_span::<MAIN_FRAME>,
                 crate::runtime::frame_profile::flush_trace_on_exit,
             )
                 .chain()
@@ -575,14 +579,17 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
         render::BlockEntityRenderPlugin,
         render::EntityShadowRenderPlugin,
     ));
-    app.add_plugins(render::DepthSmaaPlugin);
+    app.add_plugins((
+        render::DepthSmaaPlugin,
+        render::motion_blur::CameraMotionBlurPlugin,
+    ));
     app.add_plugins(crate::render_mode::RenderModePlugin::new(
         args.render_mode,
         diagnostics_enabled,
     ));
     app.add_plugins(render::PanoramaRenderPlugin);
     if let Some(particle_assets) = &particle_assets {
-        app.insert_resource(render::ParticleSimulation(
+        app.insert_resource(render_scene::ParticleSimulation(
             particles::ParticleSystem::from_assets(particle_assets),
         ));
     }
@@ -593,7 +600,7 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
     crate::primitive_shapes::configure(&mut app);
     app.init_resource::<client_presentation::presentation::viewmodel::HandAdapter>();
     if let Some(geometry) = hand_geometry {
-        app.insert_resource(geometry);
+        app.insert_resource(render_scene::ViewmodelGeometryResource(geometry));
     }
     #[cfg(feature = "acceptance")]
     if let Some(identity) = phase3_identity_source {

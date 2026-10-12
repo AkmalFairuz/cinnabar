@@ -1,3 +1,30 @@
+## Actor animation ownership
+
+`actor-animation` owns actor rigs, Molang evaluation, controllers, poses,
+attachables, custom skin models, Java 1.7 motion and the original emotes. It is
+Bevy-free and sits below `client-world`. Actor authority supplies each actor through
+the `AnimatedActor` trait and an `ActorTickContext` per tick, and drives the store
+at spawns, swings, hurts, server animations and fixed ticks. Synced property
+definitions and the wolf dye tint are animation inputs; `client-world` keeps the
+property registry and no longer depends on `render-model`.
+
+Tests that drive actor authority live in `client-world`'s `actor_store::animation_tests`,
+using fixtures from the `test-support` feature. Animation unit tests use a plain actor
+double. Compilation and execution of this move remain unverified, and no actor
+animation parity gate closes.
+
+## Render geometry and scene ownership
+
+- `render-model` owns CPU block-model and selection geometry, dropped-item meshes,
+  actor rig construction and artwork, and validated viewmodel meshes.
+- `render-scene` owns Bevy submission resources, chunk publication queues,
+  camera settings, and renderer acknowledgements. `client-presentation` and
+  `acceptance` consume these contracts without depending on `render`.
+- `render` owns GPU passes, pipelines, uploads, and render-world system registration.
+  The app composes the camera motion-blur plugin with the other GPU plugins.
+- Existing behavior tests are retained. Compilation and execution of these moves
+  remain unverified; behavior and performance acceptance gates stay open.
+
 ## Player interaction ownership
 
 `client-interaction` owns the movement and interaction resource wrappers, item-use
@@ -78,6 +105,17 @@ material selection, carrier roundtrips and malformed states. Offline Metal frame
 cover every state beside supporting terrain; broader world-join and performance
 gates remain open.
 
+## Respawn anchor artwork
+
+Respawn anchors compile six cube faces for charge states zero through four. Terrain
+arrays and animated top materials retain the selected charge, while the shared
+carried-face sheet preserves pack overrides for inventory and held rendering.
+Original-art regressions cover carrier roundtrips, short arrays, scalar overrides,
+transparent faces, partial animations and malformed states. Headless captures with
+checked world and icon carriers verify the held cube and all five charge textures
+through placement and charging input. Server-pack compilation, broader block and
+animation parity, and performance acceptance remain incomplete.
+
 ## End rod terrain geometry
 
 End rods compile a separate shaft and mounting plate for all six integer-facing states.
@@ -86,6 +124,28 @@ alpha testing and no full-face occlusion. The owning regression covers active re
 identities, carrier roundtrips, bounds, UVs and unsupported selectors. Offline GPU
 acceptance uses original fixture art and production terrain meshing and shaders;
 broader residual-family, world-join and performance gates remain open.
+
+## Grindstone terrain geometry
+
+Grindstones compile separate supports, pivots and wheel for floor, ceiling and
+wall mounts in all four directions, including the legacy multiple selector's
+floor pose. Each part retains its pack-resolved material and sprite rectangle.
+Original-art regressions cover every registered state, carrier roundtrips,
+malformed selectors and replacement sprites. Matched headless frames cover all
+16 registered states, and real input places a new grindstone through a local
+server. Acceptance uses externally compiled carriers with production terrain
+consumers; runtime server-pack compilation and reported server-version placement
+remain unverified. No broader parity gate closes.
+
+## Sea pickle terrain geometry
+
+Sea pickles compile one to four separate bodies and crossed live tips selected by
+the typed count and dead states. Bodies retain their side, top and inset cap sprite regions;
+replacement packs supply the sprite, and water remains a separate contributor.
+Original-art regressions cover all eight registry states, carrier roundtrips,
+material ownership and malformed selectors. Geometry uses the carrier's existing
+position and UV precision. Rendered/input acceptance and reported server-version
+placement remain incomplete; broader parity gates stay open.
 
 ## RakNet transport compatibility
 
@@ -103,6 +163,8 @@ platforms. These limits and the unresolved server-routing behavior remain open g
   `bridge`; shared skin data lives in `render-api`.
 - `launcher-host` owns authentication and core processes, account and artwork workers,
   server-list storage, storage scans, persistent login IDs, video persistence and process lifecycle services.
+  It also runs local worlds: the world store, the BDS download and the local server processes; the core
+  only receives the open world's address over `local_world.v1`. This move is not yet compiled or run.
   `client-shell` supplies the menu resources and drivers; `app` adapts session and network state.
 - `first-run` owns the standalone setup window and asset preparation flow. Shared OreUI styles
   live in `ui`, and panorama preparation lives in `render-model`. Both new crates are Bevy-free.
@@ -124,6 +186,20 @@ The app retains renderer, UI, audio, and world publication adapters and their
 subscriber orchestration. Block visuals still use renderer-owned material flags,
 and item, glyph, audio, and artwork payloads retain their existing owners. These
 moves do not change the open behavior or performance acceptance gates.
+
+## Diagnostics ownership
+
+`diagnostics` holds Bevy-free metrics and marker contracts, with no `protocol`
+dependency. The app owns the build-identity resource and passes its build profile
+into the runtime-metadata and world-publication markers. Marker output is unchanged;
+compilation and test execution of this move remain unverified until CI.
+
+## World day length
+
+`world::TICKS_PER_DAY` is the single day length for sky and moon-phase math, the HUD
+days-played count and their tests. The guest SDK keeps its time-override bound because
+it cannot depend on `world`; a compile-time check in `render` keeps the two equal.
+Values are unchanged; compilation and test execution remain unverified until CI.
 
 ## Login identity
 
@@ -291,6 +367,9 @@ moves do not change the open behavior or performance acceptance gates.
   performance gates remain open.
 - Dressing Room persists classic/slim and static custom-geometry skins, independent capes, imports and item edits. Home
   and Pause previews support rotation and pointer tracking. Cape attachment uses its own shoulders.
+  Standard fallback clothing uses quarter-texel expansion and the hat uses half-texel expansion;
+  base and outer faces share the skin atlas orientation. Redeclared skin parts default to visible
+  when they omit a hidden flag. Full second-layer preview parity remains incomplete.
 - Cropped cape imports pad the 46×22 layout at supported texture scales with transparent pixels,
   preserving texels and private source files. This custom import extension leaves native cape
   gallery parity incomplete.
@@ -306,11 +385,13 @@ moves do not change the open behavior or performance acceptance gates.
 ## Shipped OreUI fonts
 
 - Body text uses Cinnangles Seven and headings use Cinnangles Ten, derived from the shipped
-  Cinnangles Sans. Optional font carriers compile before startup and use the default font when
-  missing or invalid. OreUI no longer reads installed game fonts or rasterizes them at startup.
-- Compiled Unicode ranges supply Latin, symbols and bounded CJK coverage. The installed Noto
-  chain and its worker cache have been removed. Full Unicode coverage, script substitution,
-  bidirectional shaping and small-text raster parity remain incomplete.
+  Cinnangles Sans. Optional face bundles compile before startup and use the default font when
+  missing or invalid. OreUI reads no installed game fonts and rasterizes nothing at startup.
+- Each OreUI face maps only its Latin, Greek, Cyrillic and symbol ranges. Its bundle holds
+  unhinted FreeType rasters of them, tightly packed R8: a 52 px distance field and exact coverage
+  for physical sizes 1-9 px. The shipped Sans carrier draws every other character. This restores
+  the pre-Cinnangles OreUI text rendering. Full Unicode coverage, script substitution, bidirectional shaping and
+  distance-field rendering of CJK remain incomplete.
 - Game-bundle artwork remains a runtime input; this font change closes no native artwork,
   responsive-layout or font-parity gate.
 
@@ -2320,6 +2401,23 @@ nonuniform scale shear and the separate legacy/custom item paths. Changes are un
 no complete first-person parity gate is closed. See
 [attachable rules](docs/reference/held-attachables.md).
 
+2026-10-11 initial actor presentation: newly bound animated rigs evaluate their
+initial pose and metadata-controlled visibility before a zero-tick frame draws.
+Evaluation uses current equipment, riding, skin and view context within the
+existing actor and world budgets. Repeated frames preserve authored state;
+simulation clocks continue on the next tick. Synthetic regressions cover custom
+packs, lifetime replacement, local view replay and budget exhaustion. Initial
+publication requires a complete animated pose, render-controller selection and
+selected geometry poses, using a nonzero pose identity at simulation tick zero.
+The Java animation option seeds current posture and riding flags without advancing motion.
+Pending first skins initialize once their prepared appearance is available,
+including when simulation ticks passed during preparation.
+Explicit rest artwork still requires a completed observation after admission or reset.
+Retries refresh current query inputs while retaining simulation history; local
+view refreshes keep priority over new rigs. Unchanged off-screen rigs allocate
+nothing between ticks. This does not close the broader actor animation or
+placement-latency parity gates.
+
 2026-10-04 end crystals and respawn anchors: crystal artwork now bakes native
 alpha-test coverage instead of dropping the whole rig over fractional texels;
 the pack supplies nested frame rotation, bobbing and base visibility. Native
@@ -2703,6 +2801,12 @@ light at their feet through the shared light curve with daylight fixed at 1 (the
 texture, tint and sample point are unmatched), pack attachables (held/worn on player bodies) layer over the equipment runtime per session
 (pack bindings win by item identifier; pack property defaults seed only from `entities/` in
 resource packs), rigs depending on vanilla clips are attributed as fallbacks; pack precedence follows the Bedrock stack (last entry wins). No vanilla acceptance gate is closed by this change.
+
+2026-10-12 protocol boundary: `protocol` exposes only Cinnabar-owned types: an opaque
+`Packet`, owned `GameData` startup facts, the login skin and version constants, the pack
+handoff, transfer and error types. Other crates' tests use `protocol::test_support`; wire-layout
+tests compile inside the crate. Valentine and Jolyne remain its codec and session layer, and the
+architecture gate rejects any other crate depending on them. Behaviour and parity are unchanged.
 
 2026-09-30 protocol-2193 wire target (owner decision): Cinnabar moves from
 Bedrock 1.26.44 / protocol 2168 to 1.26.50 / protocol 2193, because Gophertunnel
@@ -4649,6 +4753,12 @@ Scope: block registry + block-state → model/texture mapping (generated export 
       render Fancy. Wall-torch pivot, ladder/rail offsets, and rail curve
       sprite orientation need native measurement; the coverage baseline must
       be regenerated. Residual names: `docs/phase-2-family-inventory.md`.
+    - [ ] Coral fans compile spreading floor sprites and four wall mounting
+      directions with replacement-pack artwork. Native-server placement and
+      rendered parity acceptance remain incomplete.
+    - [ ] Tripwire hooks compile separate mounts, pitched shafts, eyes and attached
+      string in every facing and signal state. Native-server placement and
+      rendered parity acceptance remain incomplete.
     - [x] Round two: night light floors lowered to the night sky transfer,
       biome tints blend on a 4-block lattice (four taps per axis; vertical axis
       unblended, needs measurement), chains route through crossed link planes.
@@ -5637,9 +5747,13 @@ tick states; correction/rewind handling (`CorrectPlayerMovePrediction`).
   budget. Land movement speed is not clamped.
   Honey jump/slide, soul speed and depth
   strider coefficients are provisional (honey and soul speed have no public value). Riding
-  suspends player physics and streams steering input with boat paddle flags; rider seat
-  following, client-predicted vehicles (`IsInClientPredictedVehicle`), horse jump wire
-  signalling are not implemented. Sweet berry bush slowdown is written in `tools/registrygen`
+  suspends player physics and streams steering input with boat paddle flags. Server-defined
+  seat offsets follow the mount's actor origin and yaw for local and remote riders without
+  multiplying the offset by entity scale. Boat jump and other vehicle sneak presses send a
+  vehicle-targeted dismount request; the server's removal link releases the rider.
+  Incomplete: authored seat fallbacks and special horse/camel/parrot placement, predictive
+  dismount exit placement, client-predicted vehicles (`IsInClientPredictedVehicle`) and
+  horse jump wire signalling remain open. Sweet berry bush slowdown is written in `tools/registrygen`
   (unverified state count and coefficients) and the sim, but the physics carrier is not
   regenerated: at reconcile run `go -C tools/registrygen run . -physics-v2168-out
   crates/assets/data/block-physics-v2168.bin -physics-v2168-sha-out
@@ -7497,37 +7611,26 @@ No visual parity or hardware performance gate closes with this extension.
   command is indistinguishable from the client's own feedback. No native parity
   gate closes from these changes.
 
-### Shipped font grid and coverage (incomplete text parity)
+### Shipped font grids and coverage (visual acceptance pending)
 
-Shipped carriers include every mapped source scalar. Sans uses its 18-pixel raster em;
-Seven, Ten, Five and Five Bold use 20, with one atlas texel per source-grid unit.
-Semantic line and word-space metrics come from the carrier table. OreUI rounds final
-unrotated glyph edges onto the device grid while retaining semantic sizes and tracking.
-Five and Five Bold are available as roles; current screens still use Seven and Ten.
+The Sans carrier includes every mapped source scalar at its 18-pixel raster em. The four
+generated faces use a 1000-unit em and committed pixel cells with individual widths and
+heights. The generator traces those cells into fresh outlines and writes declared advances,
+bearings and pair spacing, then keeps only each face's Latin, Greek, Cyrillic and symbol
+ranges; Sans draws every other scalar. Fonts and source manifests reproduce byte for byte.
+
+The Sans carrier preserves partial edge coverage and glyph advances in 1/64 atlas texels,
+excludes legacy character maps from Unicode lookups, and retains source bearings. Face
+bundles hold a 52 px FreeType distance field and exact 1-9 px coverage with the same advance
+precision. The runtime loader applies generated pair spacing at each raster em; layout
+includes it before wrapping. The carrier table owns line metrics. Sans pixel-grid text
+rounds final unrotated glyph edges onto the device grid; face rasters are filtered. Five and Five Bold
+are available as roles; current screens still use Seven and Ten.
+
 Missing regular, bold, italic and monospace mathematical Latin letters and digits use
-original grid-based variants built from the shipped Latin artwork. This fixes the
-sampled styled MOTD boxes; unrestricted Unicode and native fallback shaping remain open.
-
-The display faces now use original ASCII pixel drawings and declared per-glyph
-advances. Ten has heavier stems and narrower I/i; Five and Five Bold use wider,
-five-row letterforms. Seven has revised lowercase letters, digits and descenders.
-Greek and Cyrillic display capitals follow the adjusted Latin proportions. The
-generator preserves the 64-unit outline grid, complete source coverage and fixed
-metadata, and reproduces the shipped fonts and manifests byte for byte.
-
-Full parity is incomplete. Advances round to the nearest font unit, while ink
-widths and stroke weights remain quantized to the source grid. The carrier compiler
-still rounds glyph advances to whole atlas texels, limiting runtime spacing precision. Ten's 0.052-em
-bearing is represented by 0.05 em on its 20-texel carrier. Five's fine weight and
-bearing differences cannot all fit that grid. Seven's accented fallback drawings
-have not all been revised to match the new ASCII letters. A few narrow accented
-Ten capitals retain their prior forms when a mark cannot fit the adjusted base.
-At GUI scale 7, Seven's
-14-texel capital height maps to 39.2 screen pixels; preserving this size cannot also
-give every texel a uniform integer width. Rounded edges and nearest sampling do
-not close that scale/weight gate. Source line metrics retain sub-unit rounding.
-Version-matched live text-raster evidence across all GUI scales, locale shaping,
-kerning, and the remaining per-glyph differences are open gates.
+original grid-based variants built from the shipped Latin artwork. Unrestricted Unicode,
+script shaping and native fallback rendering remain open. Owner visual acceptance and
+live text rendering across scales remain open gates.
 
 ## Device render-distance defaults
 
@@ -7621,3 +7724,68 @@ Incomplete parity: exact custom-biome fallback profiles and regional or height-a
 Composters retain inward walls and a level-dependent floor. Cauldrons retain their rim, inner floor, walls and feet, with separate water, lava and powder-snow surfaces at each fill level. These models do not occlude full neighbor faces.
 
 Incomplete parity: cauldron block-actor potion and dyed-water colours require runtime block-actor data; their state-only visual remains provisional. Enhanced lighting and performance acceptance remain open.
+
+Mount equipment admission is incomplete. Each compiled entity symbol carries a
+typed unresolved, empty, supported or provisional equipment disposition. The
+existing eleven mount layouts are retained as provisional facts in one
+hash-checked source; they do not prove active component groups or the full native
+inventory. Actor admission caches these facts, including unresolved pack
+replacements. Unknown mounts no longer inherit horse equipment cells in JSON-UI,
+fallback drawing, pointer handling and quick-move routing. Active equippable
+components, accepted items, conditional activation, advertised custom bases and
+later mount layouts remain incomplete and do not close the entity parity gate.
+Entity carrier 17 requires a `make assets` rebuild.
+
+### Compiled furnace fuel admission (incomplete)
+
+Furnace quick-move fuel decisions use numeric registry facts and validated compiled inputs.
+Retained retail compatibility eligibility and log ingredient preference remain provisional;
+the complete native fuel inventory and durations are unverified. Missing, malformed and
+unsupported component declarations stay unresolved. Unknown and explicitly nonfuel items
+are deferred to the player inventory rather than guessed into a furnace cell. Committed furnace
+recipe inputs are bound by numeric IDs, tags and metadata during admission.
+Session duration conversion and complete native recipe precedence remain unverified.
+Other container slot rules remain incomplete; this change
+does not close those gates.
+
+Block destroy facts are compiled into world carrier 15 and read by numeric runtime
+identity during mining. Every input state is checked against the independent pinned
+registry; changed or custom identities remain unresolved. The existing hardness and
+tool source is retained as explicitly provisional prediction data. Full native tool,
+state-dependent hardness, legacy protocol and session destroy-component coverage is
+incomplete; this does not close the complete destroy parity gate. `make assets`
+regenerates the carrier and stale envelopes fail admission. Held-item tool and
+creative-break classification still use item names and need separate admission
+facts before the complete mining path can be considered name-free.
+
+Movement descriptor coverage remains incomplete. The current physics carrier requires a typed
+movement disposition for every admitted state. Existing declared special rules retain their
+numerical behavior; unclassified states remain unresolved and keep the previous conservative
+numerical defaults. No ordinary movement classification is inferred from absence of a special
+rule. Complete native ordinary/special coverage, custom session movement components and
+all provisional rule values still require verification before this gate can close.
+
+## Brewing stand models
+
+Brewing stands compile a central post, three feet and three bottle-selected radial panels
+from pack textures. All eight registered bottle combinations retain their own sprite
+regions. Exact server placement, native rendered comparison and broader lighting and
+performance parity remain incomplete.
+
+## Compiled item armour
+
+- Protection and player slots live in the entity carrier; HUD capture reads numeric registry facts resolved at admission. Server wearable components replace protection without per-frame parsing.
+- Incomplete: the full armour identifier/class inventory, missing-member defaults, body slots and later component versions still need parity verification. Unverified items and malformed declarations retain explicit unresolved facts.
+
+Effective item durability is shared through required entity-carrier descriptors and session registry admission. Unknown entries and invalid declared maxima stay unresolved; UI and elytra gameplay read the admitted numeric-ID fact. This gate remains incomplete: the full damageable item inventory, native class bindings, numeric component bounds and all network replacement behavior still need verification. The pinned base table preserves the existing positive values and its coverage guard checks their membership in the independent retail inventory.
+
+## Held-item grip admission (incomplete parity)
+
+Item grip facts are compiled into entity carrier 17, checked against the separate
+retail identity inventory and copied through numeric item admission into equipment
+input. Unknown names cannot borrow a tool grip. Explicit session flags, including
+false, replace the compiled upright choice. The existing built-in grip and rod-art
+choices remain provisional compatibility data. Complete native, metadata, version
+and custom base-item coverage is incomplete. Optional Java animation name routing
+remains a separate incomplete admission path. This does not close the complete
+equipment parity gate. `make assets` rebuilds carriers that lack these records.

@@ -157,9 +157,11 @@ impl SourceReads {
     }
 
     /// Applies queue backpressure without losing the pack's requested key. Without a worker
-    /// thread, as in a browser, the read runs on the caller's frame instead.
+    /// thread, as in a browser, the read runs on the caller's frame and stays pending until
+    /// collected, as a queued read does.
     fn submit_to(state: &mut State, job: Job, worker: Option<&Sender<Job>>) {
         let Some(worker) = worker else {
+            state.pending = Some(job.key.clone());
             job.run();
             return;
         };
@@ -220,5 +222,22 @@ mod tests {
         assert_eq!(key, "failed");
         assert!(source.is_none());
         assert!(reads.collect().is_none());
+    }
+
+    #[test]
+    fn inline_source_read_stays_pending_until_collected() {
+        let reads = SourceReads::default();
+        let first = job(&reads, "first");
+        SourceReads::submit_to(&mut reads.state.borrow_mut(), first, None);
+        assert_eq!(reads.state.borrow().pending.as_deref(), Some("first"));
+        reads.request_local("second", std::path::Path::new(""), "textures/fixture", 1);
+        let (key, source) = reads.collect().unwrap();
+        assert_eq!(key, "first");
+        assert!(source.is_none());
+        assert!(reads.state.borrow().pending.is_none());
+        assert!(
+            reads.collect().is_none(),
+            "the sibling waited instead of reading"
+        );
     }
 }

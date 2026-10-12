@@ -5,7 +5,7 @@ use web_time::Instant;
 use bevy::prelude::Resource;
 use chunk_pipeline::ViewCohortStatus;
 use client_world::CommittedControlEvent;
-use render::{PresentedFrameAck, TargetRenderExpectation};
+use render_scene::{PresentedFrameAck, TargetRenderExpectation};
 use world::SubChunkKey;
 
 use self::{

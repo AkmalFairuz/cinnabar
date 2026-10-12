@@ -1,9 +1,10 @@
 //! Gathers what an actor wears and holds from the world stream (and, for the local player, the
 //! client-owned inventory) into runtime input.
 
+use actor_animation::AttachableAnimationInput;
 use assets::ItemVisualRoute;
 use chunk_pipeline::WorldStream;
-use client_world::{ActorArmorSnapshot, AttachableAnimationInput, CanonicalItemStack};
+use client_world::{ActorArmorSnapshot, CanonicalItemStack};
 use protocol::ActorHandedness;
 
 use super::runtime::{ActorEquipmentInput, HeldKind, WornItem};
@@ -30,6 +31,7 @@ pub(super) fn worn_item(item: &CanonicalItemStack, dye_rgb: Option<u32>) -> Opti
         return None;
     }
     Some(WornItem {
+        grip: item.grip,
         identifier: item.identifier.clone()?,
         metadata: item.identity.metadata,
         damage: item.damage,
@@ -158,6 +160,7 @@ mod tests {
     #[test]
     fn local_attachable_input_retains_other_hand_and_render_timing() {
         let item = |identifier: &str| WornItem {
+            grip: assets::item::grip::builtin_item_grip(identifier),
             identifier: identifier.into(),
             metadata: 0,
             damage: None,

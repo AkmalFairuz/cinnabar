@@ -22,8 +22,8 @@ use bevy::{
     time::Real,
     window::{CursorOptions, PrimaryWindow},
 };
-use render::UiRenderStatsResource;
-use render::{
+use render_scene::UiRenderStatsResource;
+use render_scene::{
     ChunkRenderQueue, GpuFrameTimes, RuntimeStage, RuntimeStageProfiler, VisibilityDiagnostics,
 };
 

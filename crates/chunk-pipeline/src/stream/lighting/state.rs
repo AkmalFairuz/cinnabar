@@ -271,7 +271,7 @@ impl WorldStream {
             .copied()
             .flat_map(|source| {
                 source.mesh_dependents().filter(move |dependent| {
-                    reach.reaches([
+                    reach.light_reaches([
                         i64::from(dependent.x) - i64::from(source.x),
                         i64::from(dependent.y) - i64::from(source.y),
                         i64::from(dependent.z) - i64::from(source.z),

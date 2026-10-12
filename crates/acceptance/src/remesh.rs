@@ -2,7 +2,7 @@ use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use web_time::Instant;
 
 use chunk_pipeline::ViewCohortStatus;
-use render::{PresentedFrameAck, RenderViewCohort, TargetRenderExpectation};
+use render_scene::{PresentedFrameAck, RenderViewCohort, TargetRenderExpectation};
 use world::SubChunkKey;
 
 use super::teleport::{

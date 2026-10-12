@@ -85,9 +85,12 @@ impl CachedArchive {
         Ok(archive)
     }
 
-    /// A browser has no core cache directory, and its relay streams every archive instead.
+    /// Browsers have no core cache directory, so every cache reference is rejected there and
+    /// only streamed archives can complete a handoff.
     #[cfg(target_arch = "wasm32")]
     pub(super) fn read(&self, _root: Option<&Path>, _size: u64) -> Result<Vec<u8>, BridgeError> {
-        Err(invalid("cached archives are not readable in a browser"))
+        Err(invalid(
+            "cached archive references are unavailable in the browser",
+        ))
     }
 }

@@ -2,32 +2,52 @@ use super::*;
 use crate::test_support::fixture_font;
 use ui::oreui_theme as theme;
 
-/// A small valid carrier bound to the selected shipped manifest.
-fn face_bytes(face: OreUiFont) -> Box<[u8]> {
+/// Writes a distance-field bundle of `glyphs` bound to the face's shipped manifest.
+fn write_bundle(directory: &Path, face: OreUiFont, glyphs: &[assets::GlyphMetrics]) {
     let fixture = fixture_font();
     let profile = face.carrier().font_face.unwrap();
     let manifest = assets::canonical_source_manifest_sha256(profile.manifest);
-    assets::encode_font_catalog(manifest, fixture.glyphs(), fixture.pages()).unwrap()
+    let raster = assets::FontFaceRaster {
+        em_pixels: NATIVE_EM,
+        rendering: assets::FontRendering::NativeSdf,
+        carrier: assets::encode_font_catalog(manifest, glyphs, fixture.pages()).unwrap(),
+    };
+    let bytes = assets::encode_font_face_bundle(manifest, &[raster]).unwrap();
+    std::fs::write(directory.join(face.carrier().output), bytes).unwrap();
 }
 
-/// Writes [`face_bytes`] where [`install`] looks for the face.
+const NATIVE_EM: u32 = 52;
+
+/// Writes the shared Sans carrier the range-limited faces require.
+fn write_sans(directory: &Path) {
+    let fixture = fixture_font();
+    let manifest = assets::canonical_source_manifest_sha256(
+        assets::carriers::FONT.font_face.unwrap().manifest,
+    );
+    let bytes = assets::encode_font_catalog(manifest, fixture.glyphs(), fixture.pages()).unwrap();
+    std::fs::write(directory.join(assets::carriers::FONT.output), bytes).unwrap();
+}
+
 fn write_face(directory: &Path, face: OreUiFont) {
-    std::fs::write(directory.join(face.carrier().output), face_bytes(face)).unwrap();
+    write_sans(directory);
+    write_bundle(directory, face, fixture_font().glyphs());
 }
 
 #[test]
-fn faces_load_from_carriers_a_browser_holds_in_memory() {
-    let directory = Path::new("compiled");
-    let mut carriers = assets::carriers::file::MemoryCarriers::default();
+fn faces_stay_uninstalled_without_their_sans_fallback() {
+    let directory = tempfile::tempdir().unwrap();
     for face in OreUiFont::ALL {
-        carriers.insert(directory.join(face.carrier().output), face_bytes(face));
+        write_bundle(directory.path(), face, fixture_font().glyphs());
     }
     let base = fixture_font();
-    let fonts = install_from(Arc::clone(&base), directory, |path| carriers.open(path));
-    assert_eq!(fonts.named_fonts().len(), OreUiFont::ALL.len());
-    for face in OreUiFont::ALL {
-        assert_ne!(fonts.font_named(face.name()).identity(), base.identity());
-    }
+    let fonts = install(Arc::clone(&base), directory.path());
+    assert!(Arc::ptr_eq(&base, &fonts));
+    write_sans(directory.path());
+    let fonts = install(Arc::clone(&base), directory.path());
+    assert!(!std::ptr::eq(
+        fonts.font_named(OreUiFont::Ten.name()),
+        fonts.as_ref()
+    ));
 }
 
 #[test]
@@ -67,14 +87,16 @@ fn compiled_faces_load_without_a_game_bundle_and_preserve_default_glyphs() {
     let base = fixture_font();
     let fonts = install(Arc::clone(&base), directory.path());
     assert_eq!(fonts.glyphs(), base.glyphs());
-    assert_eq!(fonts.named_fonts().len(), OreUiFont::ALL.len());
+    // The fixture base is not Sans, so the shared fallback attaches as one more alias.
+    assert_eq!(fonts.named_fonts().len(), OreUiFont::ALL.len() + 1);
     for face in OreUiFont::ALL {
         let selected = fonts.font_named(face.name());
         assert_ne!(selected.identity(), base.identity());
         assert_eq!(
             selected.line_metrics(),
-            Some(face.carrier().font_face.unwrap().line_metrics())
+            Some(face.carrier().font_face.unwrap().line_metrics_at(NATIVE_EM))
         );
+        assert_eq!(selected.rendering(), assets::FontRendering::NativeSdf);
         assert!(usize::from(selected.glyph('/').unwrap().page) >= base.pages().len());
     }
     assert_ne!(
@@ -164,11 +186,30 @@ fn installed_shipped_carriers_fit_the_real_ui_and_keep_unicode_glyphs() {
             'A', 'a', 'é', 'Ω', 'Я', '中', '日', '→', '⭐', '𝑩', '𝗦', '𝟭', '\u{fffd}',
         ] {
             assert!(
-                selected.glyph(character).is_some(),
+                selected.glyph_source(character).is_some(),
                 "{} lacks {character}",
                 face.name()
             );
         }
     }
     super::super::presentation::UiPresentationRuntime::new(base).unwrap();
+}
+
+#[test]
+fn shipped_font_spacing_survives_loading_and_aliasing() {
+    let directory = tempfile::tempdir().unwrap();
+    let face = OreUiFont::Ten;
+    let fixture = fixture_font();
+    let glyph = fixture.glyph('0').unwrap();
+    let glyphs: Vec<_> = ['.', 'T']
+        .into_iter()
+        .map(|codepoint| assets::GlyphMetrics {
+            codepoint,
+            ..*glyph
+        })
+        .collect();
+    write_sans(directory.path());
+    write_bundle(directory.path(), face, &glyphs);
+    let fonts = install(fixture, directory.path());
+    assert_eq!(fonts.font_named(face.name()).kerning_64('T', '.'), -233);
 }
