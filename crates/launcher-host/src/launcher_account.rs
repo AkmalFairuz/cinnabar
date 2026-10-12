@@ -542,7 +542,7 @@ fn button_art(message: &Message) -> ButtonArt {
 
 /// The core's account state as the menu's sign-in state; an offline core
 /// knows nothing about the account, so the auth supervisor's state stands.
-fn auth_state(account: &Account) -> Option<AuthState> {
+pub(crate) fn auth_state(account: &Account) -> Option<AuthState> {
     Some(match account.state {
         CoreAuth::Offline => return None,
         CoreAuth::SignedOut => AuthState::SignedOut,

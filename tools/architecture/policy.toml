@@ -1109,5 +1109,5 @@ forbidden_transitive_dependencies = ["app", "bedrock-client", "client-ui", "rend
 [[crates]]
 name = "web-client"
 path = "web/client"
-allowed_dependencies = ["app", "assets", "bridge", "client-shell", "launcher"]
+allowed_dependencies = ["app", "assets", "bridge", "launcher", "launcher-host"]
 forbidden_dependencies = ["asset-compiler"]

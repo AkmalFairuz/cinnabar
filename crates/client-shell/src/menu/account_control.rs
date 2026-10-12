@@ -9,6 +9,11 @@ use launcher::menu::view::{MenuHome, MenuProfile};
 
 use launcher_host::account_control::{AccountControl, AccountEvent};
 
+/// An account control the app installs in place of a launcher core, such as a browser's web
+/// relay; the menu signs in, signs out and follows joins through it.
+#[derive(bevy::prelude::Resource)]
+pub struct ControlAccount(pub Box<dyn AccountControl + Send + Sync>);
+
 impl MenuRuntime {
     /// Answers the shown trust prompt; "Don't Trust" also cancels the join.
     pub fn answer_server_trust(&mut self, trusted: bool) {
@@ -75,6 +80,11 @@ impl MenuRuntime {
     /// the status overrides the auth supervisor's, events surface on screen, and
     /// a pending sign-out request is sent.
     pub fn sync_account_control(&mut self, control: &mut dyn AccountControl) {
+        match self.control_sign_in.take() {
+            Some(super::account::ControlSignIn::Start) => control.start_sign_in(),
+            Some(super::account::ControlSignIn::Cancel) => control.cancel_sign_in(),
+            None => {}
+        }
         if let Some(realms) = control.realms() {
             self.realms = realms;
         }
@@ -141,12 +151,7 @@ impl MenuRuntime {
         }
         control.set_joining(self.is_connecting());
         if self.is_connecting() {
-            // A browser's join is prepared by the web relay, which reports it instead.
-            let stage = control.join_stage().or_else(|| {
-                crate::join_progress::relayed()
-                    .map(|progress| launcher_host::launcher_account::join_stage(&progress))
-            });
-            self.feeds.join.observe(stage);
+            self.feeds.join.observe(control.join_stage());
         }
         if let Some((prompt, trusted)) = self
             .feeds
@@ -192,7 +197,10 @@ impl MenuRuntime {
     /// device-code helper.
     fn finish_sign_out(&mut self) {
         self.retry_target = None;
-        self.accounts.operation = Some(launcher_host::accounts::Operation::SignOut);
+        // An account control that signs in itself keeps no saved accounts to switch.
+        if !self.control_signs_in {
+            self.accounts.operation = Some(launcher_host::accounts::Operation::SignOut);
+        }
         self.feeds.account_active_id = None;
         self.auth_process = None;
         self.auth_attempted = true;

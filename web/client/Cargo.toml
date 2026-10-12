@@ -14,10 +14,10 @@ crate-type = ["cdylib", "rlib"]
 assets = { path = "../../crates/assets" }
 bedrock-client = { path = "../../app", default-features = false }
 bridge = { path = "../../crates/bridge" }
-client-shell = { path = "../../crates/client-shell" }
 console_error_panic_hook = "0.1.7"
 js-sys.workspace = true
 launcher = { path = "../../crates/launcher" }
+launcher-host = { path = "../../crates/launcher-host" }
 wasm-bindgen.workspace = true
 
 [lints]

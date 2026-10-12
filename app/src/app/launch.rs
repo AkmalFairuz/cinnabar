@@ -8,8 +8,13 @@ use launcher_host::session_cleanup::ScopedSessionDirectory;
 pub enum CoreLink {
     /// A core this process starts for `--address`, or one already serving `--socket-dir`.
     Local,
-    /// A web relay's session, as a browser joins; `--address` names the server it joins.
-    Relay(bridge::RelaySession),
+    /// A web relay, as a browser joins through. The client starts at its menu: `sessions`
+    /// issues the relay session each join opens, and `account` signs in on the relay and
+    /// reports the joins it prepares.
+    Relay {
+        sessions: std::sync::Arc<dyn bridge::RelaySessions>,
+        account: Box<dyn launcher_host::account_control::AccountControl + Send + Sync>,
+    },
 }
 
 /// Runs the client against a local core.
@@ -42,10 +47,13 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
     let global_pack_root = layout.global_resource_packs_dir();
     pack_runtime::compile_cache::set_compile_cache_dir(layout.compiled_pack_cache_dir());
     pack_runtime::entity_pack::set_vanilla_pack_dir(layout.vanilla_pack_dir());
-    let relay = match link {
-        CoreLink::Local => None,
-        CoreLink::Relay(relay) => Some(relay),
+    let (relay, relay_account) = match link {
+        CoreLink::Local => (None, None),
+        CoreLink::Relay { sessions, account } => (Some(sessions), Some(account)),
     };
+    if relay.is_some() && args.connection_requested() {
+        bail!("a web relay link starts at the menu and joins from there; it takes no --address");
+    }
     // Reclaim leftovers of crashed earlier sessions before this process
     // binds anything new; failures are logged and never fatal. A relay
     // link owns no session directories.
@@ -260,9 +268,7 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
 
     // Validate local carriers before starting a connection: an asset failure
     // must not launch the core or wait on a server the client cannot render.
-    if relay.is_some() {
-        // The relay's session joins `--address` itself; nothing runs locally.
-    } else if let Some(address) = args.address.as_deref() {
+    if let Some(address) = args.address.as_deref() {
         let child = spawn_core_for_address(
             &layout,
             &socket_dir,
@@ -298,24 +304,17 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
         args.language.as_deref(),
     );
     crate::runtime::network::await_overlay_texture_device();
-    // A relay session has no launcher; its disconnect screen joins the same server again.
-    let menu = match (&relay, args.address.as_deref()) {
-        (Some(_), Some(address)) => menu.with_relay_retry(address),
-        _ => menu,
+    // The relay signs in itself, so no device-code helper runs.
+    let menu = if relay_account.is_some() {
+        menu.with_control_sign_in()
+    } else {
+        menu
     };
-    let rejoin_relay = relay.clone();
     let network = if connection_requested {
-        let (core, target) = match relay {
-            Some(relay) => (
-                bridge::CoreEndpoint::Relay(relay),
-                args.address.clone().map(bridge::ConnectTarget::RakNet),
-            ),
-            None => (bridge::CoreEndpoint::SocketDir(socket_dir), None),
-        };
         match spawn_network(NetworkConfig {
             session_generation: 1,
-            core,
-            target,
+            core: bridge::CoreEndpoint::SocketDir(socket_dir),
+            target: None,
             display_name: args.display_name.clone(),
             client_random_id: client_random_id.expect("connection requested"),
             client_blob_cache: client_blob_cache.cache(),
@@ -402,7 +401,10 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
     #[cfg(not(target_arch = "wasm32"))]
     app.add_systems(Update, crate::window_icon::apply);
     #[cfg(target_arch = "wasm32")]
-    app.add_systems(Update, crate::startup_progress::report_ui_upload);
+    {
+        app.add_systems(Update, crate::startup_progress::report_ui_upload);
+        crate::browser_links::configure(&mut app);
+    }
     app.add_plugins(crate::hud_tools::HudToolsPlugin {
         screenshots_dir,
         debug_overlay: args.dev_debug_overlay,
@@ -431,7 +433,7 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
         SessionController::new(core_process)
             .with_client_random_id(client_random_id)
             .with_address(args.address.as_deref())
-            .with_relay(rejoin_relay),
+            .with_relay(relay),
     )
     .insert_resource(ui_catalog)
     .insert_resource(client_blob_cache)
@@ -622,6 +624,9 @@ pub fn run_with(args: args::ClientArgs, link: CoreLink) -> Result<()> {
     crate::developer_control::configure(&mut app);
     app.add_plugins(client_extensions::ClientExtensionsPlugin);
     crate::server_experiences::configure(&mut app);
+    if let Some(account) = relay_account {
+        app.insert_resource(client_shell::menu::ControlAccount(account));
+    }
     app.init_resource::<client_state::PresenceObservation>()
         .add_systems(
             Last,

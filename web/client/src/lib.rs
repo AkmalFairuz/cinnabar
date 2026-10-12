@@ -1,5 +1,6 @@
-//! Cinnabar's browser entry. The page prepares the carriers, signs in on the web relay and picks a
-//! server, then calls [`start`]; the client runs on the page's event loop from then on.
+//! Cinnabar's browser entry. The page downloads the carriers once the player accepts the
+//! Minecraft EULA, then calls [`start`]; the client starts at its menu, signs in and joins
+//! through the web relay, and runs on the page's event loop from then on.
 #![cfg(target_arch = "wasm32")]
 
 use std::path::PathBuf;
@@ -85,13 +86,6 @@ pub fn carrier_unused(relative_path: &str) -> bool {
             .any(|carrier| carrier.report == Some(relative_path))
 }
 
-/// Reports the web relay's latest join progress: the JSON of its control socket's `connect`
-/// event, whose pack downloads the join screen shows.
-#[wasm_bindgen]
-pub fn set_connect_progress(json: &str) {
-    client_shell::join_progress::set_relayed(json);
-}
-
 /// How many leading bytes of a sound bank [`sound_bank_prefix_length`] reads.
 #[wasm_bindgen]
 #[must_use]
@@ -164,16 +158,13 @@ impl Carriers {
     }
 }
 
-/// Starts the client: it joins `server` (`host:port`) through the relay at `relay_url`, as the
-/// relay session `session_id`. `display_name` names a signed-out player. `on_progress` is called
-/// with each startup stage's label, its fraction or `null`, and whether the game now draws.
+/// Starts the client at its menu, signing in and joining servers through the web relay at
+/// `relay_url` (`wss://host`). `on_progress` is called with each startup stage's label, its
+/// fraction or `null`, and whether the game now draws.
 #[wasm_bindgen]
 pub fn start(
     carriers: Carriers,
     relay_url: String,
-    session_id: String,
-    server: String,
-    display_name: String,
     on_progress: js_sys::Function,
 ) -> Result<(), JsError> {
     // Startup runs before Bevy installs its own hook; panics should reach the console too.
@@ -190,21 +181,15 @@ pub fn start(
         );
     });
     assets::carriers::file::preload(carriers.carriers);
-    let args = match ClientArgs::parse_from([
-        "cinnabar",
-        "--address",
-        &server,
-        "--display-name",
-        &display_name,
-    ]) {
+    let args = match ClientArgs::parse_from(["cinnabar"]) {
         Ok(ParseOutcome::Run(args)) => *args,
         Ok(ParseOutcome::Help) => return Err(JsError::new("unexpected help request")),
         Err(error) => return Err(JsError::new(&error.to_string())),
     };
-    let relay = bridge::RelaySession {
-        url: relay_url,
-        session_id,
+    let control = bridge::RelayControl::connect(relay_url);
+    let link = bedrock_client::CoreLink::Relay {
+        sessions: std::sync::Arc::new(control.clone()),
+        account: Box::new(launcher_host::relay_account::RelayAccount::new(control)),
     };
-    bedrock_client::run_with(args, bedrock_client::CoreLink::Relay(relay))
-        .map_err(|error| JsError::new(&format!("{error:#}")))
+    bedrock_client::run_with(args, link).map_err(|error| JsError::new(&format!("{error:#}")))
 }

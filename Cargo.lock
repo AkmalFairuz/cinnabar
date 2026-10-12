@@ -5348,6 +5348,7 @@ dependencies = [
  "sha2",
  "thiserror 2.0.18",
  "ui",
+ "web-sys",
  "web-time",
  "zip",
 ]
@@ -9519,10 +9520,10 @@ dependencies = [
  "assets",
  "bedrock-client",
  "bridge",
- "client-shell",
  "console_error_panic_hook",
  "js-sys",
  "launcher",
+ "launcher-host",
  "wasm-bindgen",
 ]
 

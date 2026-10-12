@@ -45,21 +45,9 @@ section {
   margin: 1rem 0;
 }
 
-label { display: block; margin: 0.5rem 0; }
+a { color: var(--text); }
 
-.consent { display: flex; gap: 0.5rem; align-items: flex-start; }
-.consent input[type="checkbox"] { width: auto; margin: 0.2rem 0 0; flex: none; }
-
-input:not([type="file"]) {
-  display: block;
-  width: 100%;
-  margin-top: 0.25rem;
-  padding: 0.5rem;
-  border: 1px solid #2a3340;
-  border-radius: 4px;
-  background: var(--background);
-  color: var(--text);
-}
+.actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
 
 button {
   margin-top: 0.5rem;
@@ -72,12 +60,9 @@ button {
   cursor: pointer;
 }
 
-button:disabled { opacity: 0.5; cursor: default; }
+button.secondary { background: #2a3340; }
 
-.code {
-  font: 600 1.5rem/1 ui-monospace, monospace;
-  letter-spacing: 0.1em;
-}
+button:disabled { opacity: 0.5; cursor: default; }
 
 /* Startup progress over the canvas until the game draws; the spinner keeps turning on the
    compositor while the client's startup holds the page's thread. */

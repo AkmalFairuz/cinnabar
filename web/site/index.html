@@ -15,37 +15,16 @@
       <p class="error" id="support-reason"></p>
     </section>
 
-    <section>
-      <h2>Account</h2>
-      <p id="account-state">Connecting to the relay…</p>
-      <div id="device-code" hidden>
-        <p>Open <a id="verification-link" target="_blank" rel="noopener"></a> and enter</p>
-        <p class="code" id="user-code"></p>
+    <section id="consent">
+      <h2>Minecraft EULA</h2>
+      <p id="eula-text">Cinnabar plays with game files made from Minecraft's official resource pack.
+        They download when you agree and are kept only in this browser. To play, agree to the
+        <a id="eula-link" href="https://www.minecraft.net/eula" target="_blank" rel="noopener">Minecraft EULA</a>.</p>
+      <p id="consent-state" class="muted" role="status"></p>
+      <div class="actions">
+        <button id="decline" type="button" class="secondary">Decline</button>
+        <button id="agree" type="button">Agree</button>
       </div>
-      <button id="sign-in" type="button" disabled>Sign in with Microsoft</button>
-      <button id="sign-out" type="button" hidden>Sign out</button>
-    </section>
-
-    <section>
-      <h2>Game files</h2>
-      <div id="assets-picker">
-        <p>Choose the compiled assets folder your Cinnabar install prepared
-          (<code>.local/assets/compiled</code> in a checkout). They stay on this device.</p>
-        <input id="assets" type="file" webkitdirectory multiple>
-      </div>
-      <p id="assets-state" class="muted">No folder chosen.</p>
-      <label class="consent"><input id="eula-accept" type="checkbox">
-        <span id="eula-text">Cinnabar plays with game files made from Minecraft's official resource
-          pack. They download when you press Play and are kept only in this browser. I accept the
-          <a id="eula-link" href="https://www.minecraft.net/eula" target="_blank" rel="noopener">Minecraft EULA</a>.</span>
-      </label>
-    </section>
-
-    <section>
-      <h2>Server</h2>
-      <label>Address <input id="server" placeholder="play.example.net:19132" autocomplete="on"></label>
-      <label>Name when signed out <input id="display-name" value="Steve" maxlength="16"></label>
-      <button id="play" type="button" disabled>Play</button>
       <p id="play-state" class="error" role="alert"></p>
     </section>
   </main>

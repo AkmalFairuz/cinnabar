@@ -1,12 +1,11 @@
-// Cinnabar's browser launcher: signs in on the web relay, gathers the game files, then starts the
-// WebAssembly client. The relay serves this page, so its WebSockets share the page's origin.
+// Cinnabar's browser page: once the player agrees to the Minecraft EULA it downloads the
+// WebAssembly client and the game files the relay serves, then starts the client, which signs in,
+// lists servers and joins through the relay itself. The relay serves this page, so the client's
+// WebSockets share the page's origin.
 
 // Panics report their whole stack, not the browser's default ten frames.
 Error.stackTraceLimit = 100;
 
-const CONTROL_PROTOCOL = "cinnabar.control.v1";
-const SESSION_PREFIX = "sid.";
-const SESSION_KEY = "cinnabar.relay-session";
 const PHYSICS_REGISTRY = "block-physics-v2193.bin";
 const DEV_ASSETS = "v1/dev-assets/";
 const DEV_ASSETS_INDEX = `${DEV_ASSETS}index.json`;
@@ -18,12 +17,8 @@ const ASSET_CACHE = "cinnabar-assets";
 
 import { acceptDroppedPacks, installPackStore } from "./packs.js";
 
-// The client downloads only once the player presses Play.
+// The client downloads only once the player agrees.
 let clientLoad = null;
-let loadedClient = null;
-// The first join's startup: whether it runs, whether the client draws yet, and the server's
-// resource packs downloading meanwhile, which the overlay shows until they finish.
-const firstJoin = { running: false, drawing: false, packs: null };
 
 /** Downloads and starts the client module once, reporting its bytes to `onProgress`. */
 function loadClient(onProgress) {
@@ -34,7 +29,6 @@ function loadClient(onProgress) {
       globalThis.cinnabarHeapBytes = () => exports.memory.buffer.byteLength;
       // Global Resources keep imported packs in this page's storage.
       installPackStore(client.resource_pack_extensions());
-      loadedClient = client;
       return client;
     })
     .catch((error) => {
@@ -47,9 +41,7 @@ function loadClient(onProgress) {
 const $ = (id) => document.getElementById(id);
 const relayUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 
-let sessionId = null;
-let assetFiles = null;
-// Byte sizes of served carriers, from the relay's index; picked files carry their own.
+// Byte sizes of the served carriers, from the relay's index.
 let servedSizes = new Map();
 
 // wgpu requests no inter-stage variable limit, so devices get WebGPU's default of 16, below what
@@ -70,127 +62,30 @@ if (!navigator.gpu) {
     ? "This browser has no WebGPU. Use a current Chrome, Edge or Safari."
     : `WebGPU needs a secure page: open this over https:// or from localhost (this is ${location.origin}).`;
 }
-
-function readStoredSession() {
-  try {
-    return sessionStorage.getItem(SESSION_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function storeSession(id) {
-  try {
-    sessionStorage.setItem(SESSION_KEY, id);
-  } catch {
-    // Without storage a reload starts a new session.
-  }
-}
-
-function showAccount(account) {
-  $("device-code").hidden = account.state !== "awaiting_code";
-  $("sign-in").hidden = account.state === "signed_in";
-  $("sign-out").hidden = account.state !== "signed_in";
-  $("sign-in").disabled = account.state === "awaiting_code";
-  switch (account.state) {
-    case "signed_in":
-      $("account-state").textContent = account.gamertag
-        ? `Signed in as ${account.gamertag}.`
-        : "Signed in.";
-      break;
-    case "awaiting_code":
-      $("account-state").textContent = "Waiting for you to approve the sign-in…";
-      $("verification-link").href = account.verification_uri;
-      $("verification-link").textContent = account.verification_uri;
-      $("user-code").textContent = account.user_code;
-      break;
-    case "failed":
-      $("account-state").textContent = account.reason || "Sign-in failed.";
-      break;
-    default:
-      $("account-state").textContent = "Signed out. Servers in online mode need a Microsoft account.";
-  }
-}
-
-function connectControl() {
-  const stored = readStoredSession();
-  const protocols = stored ? [CONTROL_PROTOCOL, SESSION_PREFIX + stored] : [CONTROL_PROTOCOL];
-  const socket = new WebSocket(`${relayUrl}/v1/control`, protocols);
-  socket.onmessage = (message) => {
-    const event = JSON.parse(message.data);
-    if (event.type === "session") {
-      sessionId = event.id;
-      storeSession(event.id);
-      $("sign-in").disabled = false;
-      updatePlay();
-    } else if (event.type === "account") {
-      showAccount(event.account);
-    } else if (event.type === "connect") {
-      // The relay prepares the join, so its pack downloads reach the join screen from here.
-      loadedClient?.set_connect_progress(JSON.stringify(event.connect ?? {}));
-      showPackDownload(event.connect ?? {});
-    } else if (event.type === "error") {
-      $("account-state").textContent = `The relay refused that (${event.error}).`;
-    }
-  };
-  socket.onclose = () => {
-    $("account-state").textContent = "Lost the relay; reconnecting…";
-    $("sign-in").disabled = true;
-    setTimeout(connectControl, 2000);
-  };
-  $("sign-in").onclick = () => socket.send(JSON.stringify({ op: "sign_in" }));
-  $("sign-out").onclick = () => socket.send(JSON.stringify({ op: "sign_out" }));
-}
-
-/** The chosen files below the compiled-assets folder, keyed by their path inside it. */
-function compiledCarriers(files) {
-  const carriers = new Map();
-  for (const file of files) {
-    const parts = file.webkitRelativePath.split("/");
-    const relative = parts.slice(1).join("/");
-    if (relative) {
-      carriers.set(relative, file);
-    }
-  }
-  return carriers;
-}
-
 const REQUIRED_CARRIERS = ["vanilla-v2193.mcbea", "vanilla-v1.mcbeui", "vanilla-v1.mcbeent"];
 
-/** Accepts `carriers` (relative path -> File or served URL) once the required ones are present. */
-function useCarriers(carriers, description) {
-  const missing = REQUIRED_CARRIERS.filter((name) => !carriers.has(name));
-  if (missing.length) {
-    $("assets-state").textContent = `The game files are missing ${missing.join(", ")}.`;
-    assetFiles = null;
-  } else {
-    assetFiles = carriers;
-    $("assets-state").textContent = description;
-  }
-  updatePlay();
-}
-
-$("assets").onchange = (event) => {
-  const carriers = compiledCarriers(event.target.files);
-  useCarriers(carriers, `${carriers.size} game files ready.`);
-};
-
-/** Uses the carriers a development relay serves (`-dev-assets`), so nothing needs importing. */
-async function useServedCarriers() {
+/**
+ * The game files the relay serves (`-dev-assets`), by their path below the compiled-assets
+ * directory, each mapped to its URL; fails when the relay serves none or lacks a required one.
+ */
+async function servedCarriers() {
   let index;
   try {
     const response = await fetch(DEV_ASSETS_INDEX, { cache: "no-store" });
-    if (!response.ok) {
-      return;
-    }
-    index = await response.json();
+    index = response.ok ? await response.json() : null;
   } catch {
-    return;
+    index = null;
+  }
+  if (!index) {
+    throw new Error("This relay serves no game files, so Cinnabar cannot start here.");
   }
   const carriers = new Map(index.files.map(({ path }) => [path, `${DEV_ASSETS}${path}`]));
   servedSizes = new Map(index.files.map(({ path, size }) => [path, size]));
-  $("assets-picker").hidden = true;
-  useCarriers(carriers, "The relay provides the game files; they download when you press Play.");
+  const missing = REQUIRED_CARRIERS.filter((name) => !carriers.has(name));
+  if (missing.length) {
+    throw new Error(`The relay's game files are missing ${missing.join(", ")}.`);
+  }
+  return carriers;
 }
 
 /** Bytes `first..=last` of `url`, which must answer the range. */
@@ -239,34 +134,29 @@ async function soundBankPrefix(client, url) {
   return prefix;
 }
 
-/** The bytes of one carrier, from a chosen file or the relay. */
 /**
- * The bytes of a picked file or served URL, reporting the bytes read so far to `onProgress` as
- * they arrive. A download streams into one buffer of the `expected` size when it is known.
+ * The bytes of the carrier the relay serves at `url`, reporting the bytes read so far to
+ * `onProgress` as they arrive; a download streams into one buffer of the `expected` size when
+ * it is known.
  */
-async function carrierBytes(source, expected, onProgress) {
-  if (source instanceof File) {
-    const bytes = new Uint8Array(await source.arrayBuffer());
-    onProgress(bytes.length);
-    return bytes;
-  }
-  const { cache, kept, response } = await revalidated(source);
+async function carrierBytes(url, expected, onProgress) {
+  const { cache, kept, response } = await revalidated(url);
   if (kept) {
     const bytes = new Uint8Array(await kept.arrayBuffer());
     onProgress(bytes.length);
     return bytes;
   }
   if (!response.ok) {
-    throw new Error(`could not download ${source} (${response.status})`);
+    throw new Error(`could not download ${url} (${response.status})`);
   }
   if (!response.body) {
     const bytes = new Uint8Array(await response.arrayBuffer());
     onProgress(bytes.length);
-    await keep(cache, source, response, bytes);
+    await keep(cache, url, response, bytes);
     return bytes;
   }
   const bytes = await streamedBytes(response, expected, onProgress);
-  await keep(cache, source, response, bytes);
+  await keep(cache, url, response, bytes);
   return bytes;
 }
 
@@ -378,85 +268,9 @@ function decodedLength(response) {
   return response.headers.get("content-encoding") ? 0 : Number(response.headers.get("content-length")) || 0;
 }
 
-/**
- * Shows the first join's resource pack download over the startup overlay while it runs, and
- * hides the overlay once the download ends after the game has started drawing. Later joins show
- * it on the game's own join screen.
- */
-function showPackDownload(connect) {
-  if (!firstJoin.running) {
-    return;
-  }
-  const received = connect.received_bytes ?? 0;
-  const total = connect.total_bytes ?? 0;
-  if (connect.stage === "packs" && received < total) {
-    firstJoin.packs = connect;
-    showStartup(`Downloading resource packs ${megabytes(received)} / ${megabytes(total)} MB…`, received / total);
-  } else if (firstJoin.packs) {
-    firstJoin.packs = null;
-    if (firstJoin.drawing) {
-      firstJoin.running = false;
-      $("startup").hidden = true;
-    }
-  }
-}
-
 /** `bytes` in megabytes with one decimal, as progress labels show them. */
 function megabytes(bytes) {
   return (bytes / 1e6).toFixed(1);
-}
-
-// The last server and name, so returning from a session finds them filled in.
-const REMEMBERED = { server: "cinnabar.server", "display-name": "cinnabar.displayName" };
-for (const [field, key] of Object.entries(REMEMBERED)) {
-  try {
-    const value = localStorage.getItem(key);
-    if (value) {
-      $(field).value = value;
-    }
-  } catch {
-    // Storage is unavailable in some private windows; the fields start empty.
-  }
-}
-
-function rememberFields() {
-  for (const [field, key] of Object.entries(REMEMBERED)) {
-    try {
-      localStorage.setItem(key, $(field).value.trim());
-    } catch {
-      // Nothing to keep without storage.
-    }
-  }
-}
-
-$("server").oninput = updatePlay;
-
-// What the player agreed to, as the desktop's first run keeps it: new consent text or a new EULA
-// link asks again.
-const EULA_KEY = "cinnabar.eulaAccepted";
-const eulaConsent = () => `${$("eula-text").textContent.replace(/\s+/g, " ").trim()}\n${$("eula-link").href}`;
-try {
-  $("eula-accept").checked = localStorage.getItem(EULA_KEY) === eulaConsent();
-} catch {
-  // Without storage the player accepts again on each visit.
-}
-$("eula-accept").onchange = () => {
-  try {
-    if ($("eula-accept").checked) {
-      localStorage.setItem(EULA_KEY, eulaConsent());
-    } else {
-      localStorage.removeItem(EULA_KEY);
-    }
-  } catch {
-    // Nothing to keep without storage.
-  }
-  updatePlay();
-};
-
-function updatePlay() {
-  $("play").disabled = !(
-    sessionId && assetFiles && $("server").value.trim() && navigator.gpu && $("eula-accept").checked
-  );
 }
 
 /** Shows startup `label` over the page, with `fraction` of the bar filled when known. */
@@ -473,47 +287,90 @@ function painted() {
   return new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
 }
 
-$("play").onclick = async () => {
-  // No Mojang-derived file downloads before the player accepts the EULA.
-  if (!$("eula-accept").checked) {
-    return;
-  }
-  $("play").disabled = true;
-  $("play-state").textContent = "";
-  rememberFields();
+// What the player agreed to, as the desktop's first run keeps it: new consent text or a new EULA
+// link asks again.
+const EULA_KEY = "cinnabar.eulaAccepted";
+const eulaConsent = () => `${$("eula-text").textContent.replace(/\s+/g, " ").trim()}\n${$("eula-link").href}`;
+
+/** Whether this browser agreed to the current consent text and EULA link. */
+function rememberedConsent() {
   try {
+    return localStorage.getItem(EULA_KEY) === eulaConsent();
+  } catch {
+    // Without storage the player agrees again on each visit.
+    return false;
+  }
+}
+
+function rememberConsent(agreed) {
+  try {
+    if (agreed) {
+      localStorage.setItem(EULA_KEY, eulaConsent());
+    } else {
+      localStorage.removeItem(EULA_KEY);
+    }
+  } catch {
+    // Nothing to keep without storage.
+  }
+}
+
+/**
+ * Shows whether this browser already agreed. The player still clicks to start, since browsers
+ * allow sound and mouse capture only after one.
+ */
+function showConsent() {
+  const agreed = rememberedConsent();
+  $("agree").textContent = agreed ? "Play" : "Agree";
+  $("consent-state").textContent = agreed ? "You agreed to the Minecraft EULA in this browser." : "";
+  $("agree").disabled = !navigator.gpu;
+  $("decline").disabled = false;
+}
+
+$("decline").onclick = () => {
+  rememberConsent(false);
+  showConsent();
+  $("play-state").textContent =
+    "Cinnabar downloads no game files without your agreement. You can agree at any time.";
+};
+
+$("agree").onclick = async () => {
+  rememberConsent(true);
+  $("agree").disabled = true;
+  $("decline").disabled = true;
+  $("consent-state").textContent = "";
+  $("play-state").textContent = "";
+  try {
+    // No Mojang-derived file downloads before the player agrees.
+    const served = await servedCarriers();
     showStartup("Downloading the game…", 0);
     const client = await loadClient((received, total) =>
       showStartup(`Downloading the game ${megabytes(received)} / ${megabytes(total)} MB…`, total ? received / total : null),
     );
     // Compile reports and the prepare stamp are never read, so they are not downloaded.
-    const wanted = [...assetFiles].filter(([relative]) => !client.carrier_unused(relative));
+    const wanted = [...served].filter(([relative]) => !client.carrier_unused(relative));
     const soundBank = client.sound_bank_file();
     const languages = `${client.language_carrier_dir()}/`;
     const carriers = new client.Carriers();
     // Whole carriers download now; the sound bank and languages are read later by URL.
-    const later = (relative, source) =>
-      (relative === soundBank && typeof source === "string") || relative.startsWith(languages);
-    const sizeOf = (relative, source) => (source instanceof File ? source.size : servedSizes.get(relative) ?? 0);
+    const later = (relative) => relative === soundBank || relative.startsWith(languages);
+    const sizeOf = (relative) => servedSizes.get(relative) ?? 0;
     const total = wanted
-      .filter(([relative, source]) => !later(relative, source))
-      .reduce((sum, [relative, source]) => sum + sizeOf(relative, source), 0);
-    const verb = wanted.some(([, source]) => typeof source === "string") ? "Downloading" : "Loading";
+      .filter(([relative]) => !later(relative))
+      .reduce((sum, [relative]) => sum + sizeOf(relative), 0);
     let done = 0;
     const report = (bytes) =>
       showStartup(
-        `${verb} game files ${megabytes(done + bytes)} / ${megabytes(total)} MB…`,
+        `Downloading game files ${megabytes(done + bytes)} / ${megabytes(total)} MB…`,
         total ? Math.min((done + bytes) / total, 1) : null,
       );
     for (const [relative, source] of wanted) {
-      if (relative === soundBank && typeof source === "string") {
+      if (relative === soundBank) {
         await addRangedSoundBank(client, carriers, relative, source);
       } else if (relative.startsWith(languages)) {
         // A language downloads only once a player picks it.
-        const url = typeof source === "string" ? new URL(source, location.href).href : URL.createObjectURL(source);
-        carriers.add_remote_compiled(relative, url);
+        carriers.add_remote_compiled(relative, new URL(source, location.href).href);
       } else {
-        const bytes = await carrierBytes(source, sizeOf(relative, source), report);
+        const bytes = await carrierBytes(source, sizeOf(relative), report);
         done += bytes.length;
         carriers.add_compiled(relative, bytes);
       }
@@ -526,31 +383,23 @@ $("play").onclick = async () => {
     $("launcher").hidden = true;
     showStartup("Preparing the game…", 0);
     await painted();
-    firstJoin.running = true;
     const progress = (label, fraction, ready) => {
-      firstJoin.drawing ||= ready;
-      if (firstJoin.packs) {
-        return;
-      }
       if (ready) {
-        firstJoin.running = false;
         $("startup").hidden = true;
       } else {
         showStartup(`${label}…`, fraction);
       }
     };
-    client.start(carriers, relayUrl, sessionId, $("server").value.trim(), $("display-name").value.trim() || "Steve", progress);
+    // The client starts at its menu, where the player signs in and picks a server.
+    client.start(carriers, relayUrl, progress);
     // A pack dropped on the game imports into Global Resources.
     acceptDroppedPacks(client);
   } catch (error) {
-    firstJoin.running = false;
-    firstJoin.packs = null;
     $("startup").hidden = true;
     $("launcher").hidden = false;
+    showConsent();
     $("play-state").textContent = String(error);
-    updatePlay();
   }
 };
 
-connectControl();
-useServedCarriers();
+showConsent();

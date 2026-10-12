@@ -69,7 +69,6 @@ impl MenuRuntime {
             // started on the menu. `--address` keeps the historical behaviour
             // of exiting the process when its one session fails.
             launcher: visible,
-            relay_retry: false,
             escape_tip: None,
             visible,
             screen: initial.screen,
@@ -152,6 +151,8 @@ impl MenuRuntime {
             sign_in_requested: false,
             sign_in_cancelled: false,
             sign_in_failure: None,
+            control_signs_in: false,
+            control_sign_in: None,
             #[cfg(feature = "developer-control")]
             sign_in_fixture,
             presentation_accounts: false,

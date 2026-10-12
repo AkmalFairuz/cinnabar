@@ -65,22 +65,9 @@ impl MenuRuntime {
         });
     }
 
-    /// Lets a launcher-less session that joins through a relay, as a browser's does, fail back to
-    /// the disconnect screen and join `address` again from it instead of ending the client.
-    pub fn with_relay_retry(mut self, address: &str) -> Self {
-        self.relay_retry = true;
-        self.remember_retry_target(address, None, false);
-        self
-    }
-
-    /// Whether a failed remote session returns to the disconnect screen rather than ending.
-    pub(crate) fn retries_sessions(&self) -> bool {
-        self.launcher || self.relay_retry
-    }
-
     /// Retry is available only for a failed remote session under the same account.
     pub(super) fn can_reconnect(&self) -> bool {
-        self.retries_sessions()
+        self.launcher
             && self.disconnect_message.is_some()
             && !self.is_connecting()
             && !self.local_world_joined
@@ -106,15 +93,10 @@ impl MenuRuntime {
         self.hovered = None;
     }
 
-    /// Acknowledges the failure and returns to its origin without retaining a retry action; a
-    /// relay session has no menu of its own, so it ends and its page takes over again.
+    /// Acknowledges the failure and returns to its origin without retaining a retry action.
     pub(super) fn dismiss_disconnect(&mut self) {
         self.disconnect_message = None;
         self.retry_target = None;
-        if self.relay_retry && !self.launcher {
-            self.intents.exit = true;
-            return;
-        }
         self.show_session_origin(self.screen);
     }
 }

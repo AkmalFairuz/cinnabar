@@ -9,6 +9,15 @@ mod endpoint;
 mod error;
 mod framed;
 mod packet_delay;
+#[cfg(target_arch = "wasm32")]
+mod relay_control;
+#[cfg(target_arch = "wasm32")]
+pub use relay_control::RelayControl;
+#[cfg_attr(
+    not(target_arch = "wasm32"),
+    allow(dead_code, reason = "only browsers run a relay control socket")
+)]
+mod relay_events;
 mod status;
 mod store;
 mod worlds;
@@ -47,8 +56,9 @@ pub use packet_delay::{
     PacketDelayLease, RelayedPosition, packet_delay_with_position, set_packet_delay,
 };
 pub use status::{
-    Lifecycle, NetworkConnection, PackAcquisition, PackAdmission, PackApplication, PackDownstreamOutcome, PackOffer,
-    StatusV1, TransferPending, read_status, report_pack_application,
+    Lifecycle, NetworkConnection, PackAcquisition, PackAdmission, PackApplication,
+    PackDownstreamOutcome, PackOffer, StatusV1, TransferPending, read_status,
+    report_pack_application,
 };
 pub use store::{
     ConfirmedPurchase, PendingPurchase, PurchaseOutcome, PurchaseStatus, StoreBalance,
@@ -90,6 +100,13 @@ pub struct RelaySession {
     pub url: String,
     /// The session the relay's control endpoint issued; it is the browser's only credential.
     pub session_id: String,
+}
+
+/// Issues the relay session each browser join opens. A browser's control socket holds it and
+/// replaces it when the relay forgets an idle session, so joins ask for it as they start.
+pub trait RelaySessions: Send + Sync {
+    /// The session the next join opens, once the relay has issued one.
+    fn session(&self) -> Option<RelaySession>;
 }
 
 impl fmt::Debug for RelaySession {

@@ -9,6 +9,8 @@ mod audio_observations;
 mod block_entities;
 mod block_selection;
 mod block_use;
+#[cfg(target_arch = "wasm32")]
+mod browser_links;
 pub mod camera;
 
 #[cfg(feature = "developer-control")]

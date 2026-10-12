@@ -61,14 +61,13 @@ use launcher::menu::view::{
     JoinKind, LocalWorldCard, MenuFriendCard, MenuRealmCard, MenuServerCard, SavedServer,
 };
 
+pub use account_control::ControlAccount;
 pub use launcher_core::LauncherCoreSlot;
 use servers::{ServerWriter, load_servers};
 pub use video_settings::persist_video_settings;
 
-use std::{
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::path::PathBuf;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 use bevy::prelude::{Commands, ResMut, Resource};
 
@@ -127,8 +126,6 @@ pub struct MenuRuntime {
     vsync_override: Option<bool>,
     display_name: String,
     launcher: bool,
-    /// A launcher-less session that the disconnect screen may join again, as a browser's is.
-    relay_retry: bool,
     /// A screen a browser's Escape left open, whose tip the menu input shows.
     escape_tip: Option<escape_tips::EscapeTip>,
     servers: Vec<SavedServer>,
@@ -176,6 +173,11 @@ pub struct MenuRuntime {
     sign_in_cancelled: bool,
     /// A helper-start failure stays owned by its interactive prompt; only Failed is stored.
     sign_in_failure: Option<AuthState>,
+    /// Whether the account control signs in itself, as a browser's web relay does, so no
+    /// device-code helper runs.
+    control_signs_in: bool,
+    /// A sign-in start or cancel waiting for the next account control sync.
+    control_sign_in: Option<account::ControlSignIn>,
     #[cfg(feature = "developer-control")]
     sign_in_fixture: Option<developer_control::protocol::SignInFixtureState>,
     /// Developer recordings present placeholder accounts without signing in.
@@ -262,6 +264,19 @@ impl MenuRuntime {
     /// must answer inside that click's own event to capture the mouse again.
     pub fn resume_hovered(&self) -> bool {
         self.is_visible() && self.hovered == Some(MenuAction::PauseResume)
+    }
+
+    /// The page a primary click now would open from the sign-in prompt's link button, which a
+    /// browser must open inside that click's own event.
+    pub fn sign_in_link_hovered(&self) -> Option<String> {
+        if !self.is_visible() || self.hovered != Some(MenuAction::OpenSignInLink) {
+            return None;
+        }
+        match self.current_auth().as_ref() {
+            AuthState::AwaitingCode { code, .. } => launcher::menu::sign_in::sign_in_url(code),
+            AuthState::AwaitingXboxSignup { uri } => Some(uri.clone()),
+            _ => None,
+        }
     }
 
     pub fn is_visible(&self) -> bool {
@@ -418,7 +433,7 @@ impl MenuRuntime {
 
     /// Shows local join errors in the world menu and remote errors on the disconnect screen.
     pub fn show_join_failure(&mut self, message: String) {
-        if self.feeds.join.kind == JoinKind::Local || !self.retries_sessions() {
+        if self.feeds.join.kind == JoinKind::Local || !self.launcher {
             self.message = Some(message);
         } else {
             bevy::log::warn!(error = %message, "join failed");
@@ -448,7 +463,7 @@ impl MenuRuntime {
     /// no launcher to fall back to and must still exit the process.
     pub fn absorb_session_failure(&mut self, error: &str) -> bool {
         self.reset_death();
-        if !self.retries_sessions() {
+        if !self.launcher {
             return false;
         }
         self.show_session_origin(MenuScreen::Play);

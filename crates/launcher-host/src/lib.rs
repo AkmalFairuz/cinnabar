@@ -14,6 +14,8 @@ pub mod launcher_core;
 pub mod lifecycle;
 pub mod local_worlds;
 pub mod native_dialog;
+#[cfg(target_arch = "wasm32")]
+pub mod relay_account;
 pub mod remote_images;
 pub mod server_trust;
 pub mod servers;
