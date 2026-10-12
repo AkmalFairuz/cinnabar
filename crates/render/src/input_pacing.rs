@@ -35,7 +35,7 @@ use bevy::prelude::{Fixed, FixedUpdate, PreUpdate, Real, ResMut, Time, Update};
 use bevy::{
     app::MainScheduleOrder,
     ecs::schedule::ScheduleLabel,
-    prelude::{App, First, IntoScheduleConfigs, Plugin, Res, Resource},
+    prelude::{App, First, Plugin, Res, Resource},
 };
 #[cfg(not(target_arch = "wasm32"))]
 use bevy::{

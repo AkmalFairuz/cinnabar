@@ -73,7 +73,7 @@ pub(super) fn poll_join(
         endpoint,
         login_settings,
         client_random_id,
-        session.actor_artwork.as_deref(),
+        session.actor_artwork.as_deref().map(|artwork| &artwork.0),
         session.ui_catalog.as_deref(),
     ) {
         controller.fail_join(menu, format!("Could not connect: {error}"));
