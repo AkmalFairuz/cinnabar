@@ -5,8 +5,8 @@ use render_model::{UiRenderInput, UiRenderTextureArray};
 use sha2::{Digest, Sha256};
 
 use ui::{
-    DpiScale, ObfuscationGlyphs, SafeArea, TextEffects, TextLayoutCache, UiNode, UiNodeId, UiPoint,
-    UiRect, UiScale, UiVisual,
+    DpiScale, LoadingStage, ObfuscationGlyphs, SafeArea, TextEffects, TextLayoutCache, UiNode,
+    UiNodeId, UiPoint, UiRect, UiScale, UiVisual,
 };
 
 use super::scene_stack::Scene;
@@ -53,11 +53,10 @@ pub mod startup;
 pub mod texture_atlas;
 
 pub use debug_overlay::DebugLines;
-pub use forms::{BedHit, ChatHit, ExperienceModal, LoadingStage, ModScreensInput, ModalEdits};
 pub use hud_layout::HudFrame;
 use hud_layout::{HudGeometry, HudLayout};
 use launcher::menu::{MenuAction, MenuView};
-use primitives::{bounded_visible_text, rect, resolve_chat_line};
+use primitives::rect;
 #[cfg(any(test, feature = "test-support"))]
 pub use publish::commit::refresh_hud_frame;
 pub use publish::{
@@ -73,10 +72,10 @@ use texture_atlas::{
 };
 use ui::IconRef;
 use ui_engine::text_metrics::TextMetrics;
+use ui_screens::text::{bounded_visible_text, resolve_chat_line};
 
 const TEXT_CACHE_ENTRIES: usize = 1_024;
 const TEXT_CACHE_BYTES: usize = 8 * 1024 * 1024;
-const MAX_PRESENTED_TEXT_BYTES: usize = 512;
 #[derive(Debug)]
 pub enum UiPresentationError {
     InvalidFontTexture,
@@ -207,7 +206,7 @@ pub struct UiPresentationRuntime {
     menu_cape_thumbnail_indices: Vec<usize>,
     /// Full settings slider geometry, including steps clipped from view.
     settings_slider_drag_targets: Vec<(MenuAction, UiRect)>,
-    menu_scrolls: menu_scroll::MenuScrolls,
+    menu_scrolls: ui_engine::menu_scroll::MenuScrolls<launcher::menu::MenuAction>,
     /// The JSON-UI engine: catalogs, layout caches and animation state.
     engine: Option<Box<ui_engine::engine::FormEngine>>,
     /// The server UI pack last applied to the engine, compared by identity.

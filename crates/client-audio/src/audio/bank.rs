@@ -13,8 +13,8 @@ use std::{
 };
 
 use assets::{
-    AudioDefinition, RuntimeAudioCatalog, SoundBankEntry, SoundBankIndex, SoundEventTables,
-    decode_sound, sound_bank_prefix_len,
+    AudioDefinition, RuntimeAudioCatalog, SoundEventTables, decode_sound,
+    sound_bank::{SoundBankIndex, sound_bank_prefix_len},
 };
 use serde_json::Value;
 
@@ -86,67 +86,6 @@ enum DecodeSource {
     Server,
 }
 
-/// Where bank entries are read from: the bank file opened during loading, or in a browser, which
-/// has no files, the bank's preloaded bytes or its download URL.
-#[derive(Clone)]
-enum BankBytes {
-    File(Arc<File>),
-    Memory(Arc<[u8]>),
-    #[cfg(target_arch = "wasm32")]
-    Ranged(ranged::RangedBank),
-}
-
-/// A queued entry that keeps the bank opened during loading alive.
-struct BankEntry {
-    bytes: BankBytes,
-    entry: SoundBankEntry,
-}
-
-impl BankEntry {
-    /// Reads this entry by offset on a worker; returns None if its bytes cannot be read.
-    fn read(&self) -> Option<Vec<u8>> {
-        let file = match &self.bytes {
-            BankBytes::File(file) => file,
-            BankBytes::Memory(bank) => {
-                let start = usize::try_from(self.entry.offset).ok()?;
-                let end = start.checked_add(self.entry.len as usize)?;
-                return bank.get(start..end).map(<[u8]>::to_vec);
-            }
-            // Downloads are asynchronous; `Decoder::run_queued` reads these.
-            #[cfg(target_arch = "wasm32")]
-            BankBytes::Ranged(_) => return None,
-        };
-        let mut bytes = vec![0_u8; self.entry.len as usize];
-        let mut consumed = 0;
-        while consumed < bytes.len() {
-            let offset = self.entry.offset.checked_add(consumed as u64)?;
-            #[cfg(unix)]
-            let result =
-                std::os::unix::fs::FileExt::read_at(&**file, &mut bytes[consumed..], offset);
-            #[cfg(windows)]
-            let result =
-                std::os::windows::fs::FileExt::seek_read(&**file, &mut bytes[consumed..], offset);
-            // Without positional reads, seek then read; these targets decode without threads.
-            #[cfg(not(any(unix, windows)))]
-            let result = {
-                use std::io::{Read, Seek, SeekFrom};
-                let mut file = &**file;
-                file.seek(SeekFrom::Start(offset))
-                    .and_then(|_| file.read(&mut bytes[consumed..]))
-            };
-            match result {
-                Ok(0) => return None,
-                Ok(read) => consumed += read,
-                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(error) => {
-                    bevy::log::debug!(%error, offset, "sound bank read failed");
-                    return None;
-                }
-            }
-        }
-        Some(bytes)
-    }
-}
 
 type DecodeJob = (u64, Box<str>, DecodeSource, EncodedPermit);
 type DecodeResult = (u64, Box<str>, Option<Pcm>);
@@ -271,7 +210,7 @@ impl Decoder {
         epoch: u64,
         path: Box<str>,
         bank: ranged::RangedBank,
-        entry: SoundBankEntry,
+        entry: assets::sound_bank::SoundBankEntry,
         permit: EncodedPermit,
     ) {
         let results = self.inline.results.clone();
@@ -735,6 +674,8 @@ impl SoundBank {
 
 #[cfg(target_arch = "wasm32")]
 mod ranged;
+mod source;
+use source::{BankBytes, BankEntry};
 
 #[cfg(test)]
 mod prewarm_tests;
@@ -748,7 +689,7 @@ mod tests {
 
     #[test]
     fn review_ready_stream_is_shared_by_all_starts_until_released() {
-        let bytes = assets::encode_sound_bank(b"{}", b"{}", b"{}", &[]).unwrap();
+        let bytes = assets::sound_bank::encode_sound_bank(b"{}", b"{}", b"{}", &[]).unwrap();
         let index = SoundBankIndex::decode_prefix(&bytes).unwrap();
         let mut bank = SoundBank::from_parts(index, SoundEventTables::default(), None);
         let pcm = Arc::new(Pcm {
@@ -793,9 +734,13 @@ mod tests {
 
     #[test]
     fn lookup_queues_a_descriptor_without_touching_the_file() {
-        let bytes =
-            assets::encode_sound_bank(b"{}", b"{}", b"{}", &[("sounds/tone".to_owned(), tone())])
-                .unwrap();
+        let bytes = assets::sound_bank::encode_sound_bank(
+            b"{}",
+            b"{}",
+            b"{}",
+            &[("sounds/tone".to_owned(), tone())],
+        )
+        .unwrap();
         let path = std::env::temp_dir().join(format!(
             "cinnabar-no-frame-read-{}.mcbesnd",
             std::process::id()
@@ -833,9 +778,13 @@ mod tests {
 
     #[test]
     fn file_read_failure_is_reported_by_the_worker() {
-        let bytes =
-            assets::encode_sound_bank(b"{}", b"{}", b"{}", &[("sounds/tone".to_owned(), tone())])
-                .unwrap();
+        let bytes = assets::sound_bank::encode_sound_bank(
+            b"{}",
+            b"{}",
+            b"{}",
+            &[("sounds/tone".to_owned(), tone())],
+        )
+        .unwrap();
         let path = std::env::temp_dir().join(format!(
             "cinnabar-worker-read-failure-{}.mcbesnd",
             std::process::id()
@@ -884,7 +833,7 @@ mod tests {
         ));
         std::fs::write(
             &path,
-            assets::encode_sound_bank(b"{}", b"{}", b"{}", &files).unwrap(),
+            assets::sound_bank::encode_sound_bank(b"{}", b"{}", b"{}", &files).unwrap(),
         )
         .unwrap();
         let mut bank = SoundBank::open(&path, None).unwrap().unwrap();
@@ -909,7 +858,8 @@ mod tests {
             ("sounds/warm".to_owned(), tone()),
             ("sounds/large".to_owned(), large),
         ];
-        let bytes = assets::encode_sound_bank(b"{}", b"{}", b"{}", &files).expect("encode");
+        let bytes =
+            assets::sound_bank::encode_sound_bank(b"{}", b"{}", b"{}", &files).expect("encode");
         let path = std::env::temp_dir().join(format!(
             "cinnabar-bank-caller-{}.mcbesnd",
             std::process::id()
@@ -919,9 +869,9 @@ mod tests {
             .expect("open")
             .expect("present");
         assert!(bank.pcm("sounds/warm", false).is_some(), "workers started");
-        let before = crate::test_allocations::bytes();
+        let before = test_alloc::thread_allocated_bytes();
         let lookup = bank.lookup("sounds/large", false);
-        let copied = crate::test_allocations::bytes() - before;
+        let copied = test_alloc::thread_allocated_bytes() - before;
         assert!(matches!(lookup, PcmLookup::Pending));
         assert!(
             copied < (LARGE / 16) as u64,
@@ -939,7 +889,8 @@ mod tests {
         let files: Vec<_> = (0..MAX_QUEUED_DECODES + 8)
             .map(|index| (format!("sounds/tone{index}"), tone()))
             .collect();
-        let bytes = assets::encode_sound_bank(b"{}", b"{}", b"{}", &files).expect("encode");
+        let bytes =
+            assets::sound_bank::encode_sound_bank(b"{}", b"{}", b"{}", &files).expect("encode");
         let path = std::env::temp_dir().join(format!(
             "cinnabar-bank-backlog-{}.mcbesnd",
             std::process::id()
@@ -971,7 +922,7 @@ mod tests {
         fsb.resize(60, 0);
         fsb.extend(mode.to_le_bytes());
         fsb.extend([0, 0x40, 0, 0xc0]);
-        let bytes = assets::encode_sound_bank(
+        let bytes = assets::sound_bank::encode_sound_bank(
             br#"{}"#,
             b"{}",
             b"{}",

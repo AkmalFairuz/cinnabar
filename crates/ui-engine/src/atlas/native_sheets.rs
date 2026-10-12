@@ -256,19 +256,6 @@ struct Job {
     done: Sender<Completed>,
 }
 
-impl Job {
-    /// Decodes the sheet unless its owner has gone, and publishes the result to that owner.
-    fn run(self) {
-        if self.cancelled.load(Ordering::Acquire) {
-            return;
-        }
-        let sheet = decode(&self.bytes, &self.plan, &self.cancelled);
-        if !self.cancelled.load(Ordering::Acquire) {
-            let _ = self.done.try_send((self.key, sheet));
-        }
-    }
-}
-
 /// One process-wide decode and one queued input bound memory even during rapid pack reloads.
 fn worker() -> Option<&'static Sender<Job>> {
     static WORKER: OnceLock<Option<Sender<Job>>> = OnceLock::new();
@@ -279,7 +266,13 @@ fn worker() -> Option<&'static Sender<Job>> {
                 .name("ui-native-sheets".into())
                 .spawn(move || {
                     while let Ok(job) = receiver.recv() {
-                        job.run();
+                        if job.cancelled.load(Ordering::Acquire) {
+                            continue;
+                        }
+                        let sheet = decode(&job.bytes, &job.plan, &job.cancelled);
+                        if !job.cancelled.load(Ordering::Acquire) {
+                            let _ = job.done.try_send((job.key, sheet));
+                        }
                     }
                 })
                 .ok()?;
@@ -288,7 +281,7 @@ fn worker() -> Option<&'static Sender<Job>> {
         .as_ref()
 }
 
-/// Decodes on the worker, releasing its temporary image after copying original texels into tiles.
+/// Decodes on the worker or inline, releasing the temporary image once texels are tiled.
 fn decode(bytes: &[u8], plan: &Plan, cancelled: &AtomicBool) -> Option<Sheet> {
     (bytes.len() as u64 <= resource_pack::MAX_FILE_BYTES).then_some(())?;
     let mut reader = super::reader(bytes)?;
@@ -367,14 +360,7 @@ impl NativeSheets {
         while let Ok((key, sheet)) = self.receiver.try_recv() {
             completed = true;
             self.pending = None;
-            if let Some(sheet) = sheet {
-                self.pages
-                    .extend(sheet.tiles.iter().map(|tile| tile.page.clone()));
-                self.loaded.push((key, sheet));
-                self.dirty = true;
-            } else {
-                self.fail(key);
-            }
+            self.publish(key, sheet);
         }
         if let Some(job) = self.retry.take() {
             if let Some(worker) = worker() {
@@ -387,8 +373,9 @@ impl NativeSheets {
         completed
     }
 
-    /// Requests one original image while keeping decoded bytes and page count within the pack budget.
-    pub(super) fn request(&mut self, key: &str, source: &Source) {
+    /// Requests one original image while keeping decoded bytes and page count within the pack
+    /// budget; without `workers` it decodes on this thread.
+    pub(super) fn request(&mut self, key: &str, source: &Source, workers: bool) {
         if self.loaded.iter().any(|(name, _)| name == key)
             || self.failed.contains(key)
             || self.pending.is_some()
@@ -407,6 +394,15 @@ impl NativeSheets {
             self.fail(key.to_owned());
             return;
         }
+        if !workers {
+            let sheet = decode(&source.bytes, &plan, &self.cancelled);
+            self.publish(key.to_owned(), sheet);
+            return;
+        }
+        let Some(worker) = worker() else {
+            self.fail(key.to_owned());
+            return;
+        };
         let job = Job {
             key: key.to_owned(),
             bytes: Arc::clone(&source.bytes),
@@ -414,18 +410,18 @@ impl NativeSheets {
             cancelled: Arc::clone(&self.cancelled),
             done: self.sender.clone(),
         };
-        self.dispatch(job, worker());
+        self.submit(worker, job);
     }
 
-    /// Without a worker thread, as in a browser, the decode runs on this frame and stays pending
-    /// until `collect` receives it, so sibling requests wait as they would for a queued job.
-    fn dispatch(&mut self, job: Job, worker: Option<&Sender<Job>>) {
-        match worker {
-            Some(worker) => self.submit(worker, job),
-            None => {
-                self.pending = Some(job.key.clone());
-                job.run();
-            }
+    /// Appends a decoded sheet's pages after those already published, or records its failure.
+    fn publish(&mut self, key: String, sheet: Option<Sheet>) {
+        if let Some(sheet) = sheet {
+            self.pages
+                .extend(sheet.tiles.iter().map(|tile| tile.page.clone()));
+            self.loaded.push((key, sheet));
+            self.dirty = true;
+        } else {
+            self.fail(key);
         }
     }
 
