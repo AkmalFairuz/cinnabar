@@ -313,14 +313,18 @@ fn route_notice(system: &mut ParticleSystem, routing: &Routing<'_>, notice: &Act
             }
         }
         ActorStatusKind::Feed => {
-            if let Some(identifier) = routing
+            let consumption = routing
                 .stream
                 .authority()
-                .item_identifier(notice.data >> 16)
-                // The local player's predicted bites scatter from its eating cue instead
-                // (`spawn_local_bite`).
-                && !(notice.runtime_id == routing.stream.local_player_runtime_id()
-                    && client_audio::audio::predicted::predicts_bites(&identifier))
+                .item_use_profile(notice.data >> 16)
+                .consumption;
+            // Local admitted food uses scatter from their predicted eating cues.
+            if client_audio::audio::predicted::predicts_bites(consumption)
+                && notice.runtime_id != routing.stream.local_player_runtime_id()
+                && let Some(identifier) = routing
+                    .stream
+                    .authority()
+                    .item_identifier(notice.data >> 16)
                 && let Some(icons) = routing.icons
                 && let Some(tile) = item_tile(icons, &identifier, (notice.data & 0xffff) as u32)
             {

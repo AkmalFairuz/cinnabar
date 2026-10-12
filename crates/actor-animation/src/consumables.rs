@@ -1,6 +1,6 @@
-//! Consumption presentation derived from the canonical item-use catalog.
+//! Consumption presentation selected from effective item-use admissions.
 
-use assets::item_use::{ItemConsumption, builtin_consumption};
+use assets::item_use::ItemConsumption;
 
 /// How a consumable is used: eaten food scatters crumbs, drinks do not.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -9,10 +9,10 @@ pub enum ConsumeAnimation {
     Drink,
 }
 
-/// The use animation of the vanilla consumable `identifier`, or `None` for other items.
+/// Selects the use animation from the item's admitted consumption behavior.
 #[must_use]
-pub fn consume_animation(identifier: &str) -> Option<ConsumeAnimation> {
-    match builtin_consumption(identifier) {
+pub fn consume_animation(consumption: ItemConsumption) -> Option<ConsumeAnimation> {
+    match consumption {
         ItemConsumption::Eat => Some(ConsumeAnimation::Eat),
         ItemConsumption::Drink | ItemConsumption::Honey => Some(ConsumeAnimation::Drink),
         ItemConsumption::Unresolved | ItemConsumption::None => None,
@@ -22,35 +22,11 @@ pub fn consume_animation(identifier: &str) -> Option<ConsumeAnimation> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assets::item_use::{ItemUseProfile, compile};
-
-    #[test]
-    fn animations_follow_the_canonical_item_use_catalog() {
-        for descriptor in compile(&[]).iter() {
-            let expected = match &descriptor.profile {
-                ItemUseProfile::Provisional { consumption, .. } => match consumption {
-                    ItemConsumption::Eat => Some(ConsumeAnimation::Eat),
-                    ItemConsumption::Drink | ItemConsumption::Honey => {
-                        Some(ConsumeAnimation::Drink)
-                    }
-                    ItemConsumption::Unresolved | ItemConsumption::None => None,
-                },
-                ItemUseProfile::Unresolved => None,
-            };
-            assert_eq!(
-                consume_animation(&descriptor.identifier),
-                expected,
-                "{}",
-                descriptor.identifier
-            );
-        }
-        assert_eq!(consume_animation("fixture:unadmitted"), None);
-    }
 
     #[test]
     fn honey_is_drunk_without_food_crumbs() {
         assert_eq!(
-            consume_animation("minecraft:honey_bottle"),
+            consume_animation(ItemConsumption::Honey),
             Some(ConsumeAnimation::Drink)
         );
     }

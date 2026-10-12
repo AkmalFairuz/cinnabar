@@ -451,6 +451,8 @@ fn is_first_person_variable_tracks_the_local_camera_context() {
 
 #[test]
 fn eating_raises_the_arm_then_bobs_and_other_held_items_stay_lowered() {
+    use assets::item_use::ItemConsumption;
+
     let engine = EngineSlots {
         use_item_startup_progress: Some(0),
         use_item_interval_progress: Some(1),
@@ -458,8 +460,9 @@ fn eating_raises_the_arm_then_bobs_and_other_held_items_stay_lowered() {
     };
     let actor = actor_with_metadata(HashMap::new());
     let motion = MotionState::default();
-    let holding = |identifier: &str| ActorTickContext {
+    let holding = |identifier: &str, consumption| ActorTickContext {
         main_hand: Some(identifier.into()),
+        main_hand_consumption: consumption,
         ..ActorTickContext::default()
     };
     let progress = |context: &ActorTickContext, item_use_ticks: u32| {
@@ -474,14 +477,38 @@ fn eating_raises_the_arm_then_bobs_and_other_held_items_stay_lowered() {
             variables.number_at(1).unwrap(),
         ]
     };
-    let apple = holding("minecraft:golden_apple");
+    let apple = holding("minecraft:golden_apple", ItemConsumption::Eat);
     assert_eq!(progress(&apple, 0), [0.0, 0.0]);
     assert!(progress(&apple, 2)[0] > 0.0 && progress(&apple, 2)[0] < 1.0);
     let raised: Vec<_> = (4..=12).map(|ticks| progress(&apple, ticks)).collect();
     assert!(raised.iter().all(|[startup, _]| *startup == 1.0));
     assert!(raised.iter().any(|[_, interval]| *interval > 0.5));
     assert!(raised.iter().any(|[_, interval]| *interval == 0.0));
-    assert_eq!(progress(&holding("minecraft:bow"), 8), [0.0, 0.0]);
+    assert_eq!(
+        progress(&holding("minecraft:bow", ItemConsumption::None), 8),
+        [0.0, 0.0]
+    );
+    assert_eq!(
+        progress(&holding("minecraft:golden_apple", ItemConsumption::None), 8),
+        [0.0, 0.0]
+    );
+    assert_eq!(
+        progress(
+            &holding("minecraft:golden_apple", ItemConsumption::Unresolved),
+            8
+        ),
+        [0.0, 0.0]
+    );
+    for consumption in [
+        ItemConsumption::Eat,
+        ItemConsumption::Drink,
+        ItemConsumption::Honey,
+    ] {
+        assert_eq!(
+            progress(&holding("fixture:custom_consumable", consumption), 8),
+            progress(&apple, 8)
+        );
+    }
 }
 
 #[test]

@@ -36,6 +36,8 @@ pub struct ActorTickContext {
     pub hand_charged: bool,
     /// Ticks the main-hand item can be used for, or 0 when unknown.
     pub main_hand_max_use_ticks: u32,
+    /// Main-hand consumption after server components and pack overrides are admitted.
+    pub main_hand_consumption: assets::item_use::ItemConsumption,
     /// Selected-stack gameplay clock for the local rig; remote actors retain their own ticks.
     pub local_item_use_ticks: Option<u32>,
     /// Maximum duration of the owner's offhand stack for explicitly selected-slot queries.
@@ -777,8 +779,8 @@ pub(super) fn apply_engine_variables(
     );
     let (startup, interval) = context
         .main_hand
-        .as_deref()
-        .and_then(crate::consumables::consume_animation)
+        .as_ref()
+        .and_then(|_| crate::consumables::consume_animation(context.main_hand_consumption))
         .map_or((0.0, 0.0), |_| use_item_progress(input.item_use_ticks));
     variables.set(engine.use_item_startup_progress, startup);
     variables.set(engine.use_item_interval_progress, interval);
