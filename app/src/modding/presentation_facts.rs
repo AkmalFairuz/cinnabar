@@ -1,5 +1,6 @@
 //! Actual client frame cadence measured against monotonic wall time.
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 #[derive(Default)]
 pub(super) struct FrameRate {
     start: Option<Instant>,

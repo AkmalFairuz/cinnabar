@@ -379,7 +379,7 @@ fn drive_mod(
     } else {
         Vec::new()
     };
-    let fps = frame_rate.sample(std::time::Instant::now());
+    let fps = frame_rate.sample(web_time::Instant::now());
     let sidebar = world_observation
         .as_ref()
         .and_then(|_| presentation.sidebar_snapshot(&ui))
