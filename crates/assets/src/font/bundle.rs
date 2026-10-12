@@ -128,7 +128,7 @@ mod tests {
                 pixels_sha256: Sha256::digest([255]).into(),
                 width: 1,
                 height: 1,
-                pixels: FontPixels::Coverage(Box::new([255])),
+                pixels: FontPixels::Coverage([255u8].into()),
             })
             .collect();
         let glyph = GlyphMetrics {

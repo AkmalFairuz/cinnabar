@@ -117,7 +117,7 @@ fn compile(
             pixels_sha256: Sha256::digest(&coverage).into(),
             width,
             height,
-            pixels: FontPixels::Coverage(coverage),
+            pixels: FontPixels::Coverage(coverage.into()),
         });
     }
     glyphs.sort_unstable_by_key(|glyph| glyph.codepoint);
