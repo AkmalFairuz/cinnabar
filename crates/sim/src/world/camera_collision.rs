@@ -1,6 +1,10 @@
 //! Camera collision scans borrow palette layers and keep lenient skip counts.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    hash::{BuildHasherDefault, Hasher},
+    sync::Arc,
+};
 
 use world::SubChunk;
 
@@ -214,7 +218,7 @@ impl SectionCache {
 /// unchanged, as it is across one frame's particle collisions.
 #[derive(Default)]
 pub struct CameraShapeCache {
-    cells: HashMap<[i32; 3], (u32, u32)>,
+    cells: HashMap<[i32; 3], (u32, u32), BuildHasherDefault<CellHasher>>,
     shapes: Vec<Aabb>,
     section: SectionCache,
 }
@@ -270,5 +274,38 @@ impl PaletteWorld<'_> {
             }
         }
         Ok(())
+    }
+}
+
+/// Hashes block cells with one multiply per coordinate. The keys are local coordinates the client
+/// reads itself, so the default hasher's resistance to chosen collisions buys nothing here.
+#[derive(Default)]
+struct CellHasher(u64);
+
+impl Hasher for CellHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.write_u8(byte);
+        }
+    }
+
+    fn write_u8(&mut self, value: u8) {
+        self.write_u64(u64::from(value));
+    }
+
+    fn write_usize(&mut self, value: usize) {
+        self.write_u64(value as u64);
+    }
+
+    fn write_i32(&mut self, value: i32) {
+        self.write_u64(u64::from(value as u32));
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        self.0 = (self.0.rotate_left(5) ^ value).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
     }
 }
