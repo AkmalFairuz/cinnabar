@@ -7702,7 +7702,7 @@ replacements. Unknown mounts no longer inherit horse equipment cells in JSON-UI,
 fallback drawing, pointer handling and quick-move routing. Active equippable
 components, accepted items, conditional activation, advertised custom bases and
 later mount layouts remain incomplete and do not close the entity parity gate.
-Entity carrier 16 requires a `make assets` rebuild.
+Entity carrier 17 requires a `make assets` rebuild.
 
 ### Compiled furnace fuel admission (incomplete)
 
