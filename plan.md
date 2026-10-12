@@ -7281,7 +7281,11 @@ custom-block collision admission. Collision lists retain at most 256
 primitives. Per-state collision and selection overrides now resolve once at session
 admission and register in both network-ID spaces. Captured bottom/top slab fixtures
 match their authored geometry heights and retain stationary support for 100 ticks.
-Arbitrary collision transformations remain incomplete. The definition tree
+A state's authored `minecraft:transformation` now rotates, scales and translates its
+explicit collision and selection boxes about the block centre through the same
+transform the overlay applies to geometry, so face-attached blocks collide on their
+authored face. Rotation and scale pivots are still ignored for geometry and boxes,
+so pivoted transformations remain incomplete. The definition tree
 coalesces Float and Double tags, so exact rejection of Double-only collision fields
 remains incomplete. Unbound looping effects now stop emission after their first
 active/sleep cycle and let existing particles drain; bound effects can restart
