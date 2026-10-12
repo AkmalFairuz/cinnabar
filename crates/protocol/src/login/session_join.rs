@@ -78,11 +78,12 @@ impl LoginSequence {
         )
         .await_start_game()
         .await?;
-        let game_data = tokio::task::spawn_blocking(move || {
+        let game_data = async_platform::run_blocking(move || {
             GameData::from_wire(&wire.start_game, &wire.item_registry)
         })
         .await
-        .map_err(|_| unexpected("startup facts reader failed"))?;
+        .and_then(Result::ok)
+        .ok_or_else(|| unexpected("startup facts reader failed"))?;
         Ok((PlaySession::new(stream, cache, packs), game_data))
     }
 }
