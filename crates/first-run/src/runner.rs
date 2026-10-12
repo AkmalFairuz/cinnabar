@@ -151,6 +151,8 @@ impl Compiler<'_> {
         }
         let mut command = Command::new(carriers::kit_compiler(&self.kit));
         command.args(args);
+        #[cfg(all(windows, not(debug_assertions)))]
+        launcher_host::desktop::windows::hide_console(&mut command);
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
@@ -316,12 +318,17 @@ fn cancel_child(child: &mut std::process::Child) {
         let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
     }
     #[cfg(windows)]
-    let _ = Command::new("taskkill")
-        .args(["/PID", &child.id().to_string(), "/T", "/F"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    {
+        let mut command = Command::new("taskkill");
+        #[cfg(not(debug_assertions))]
+        launcher_host::desktop::windows::hide_console(&mut command);
+        let _ = command
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
     let _ = child.kill();
     let _ = child.wait();
 }
