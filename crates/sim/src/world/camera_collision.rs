@@ -2,7 +2,7 @@
 
 use std::{
     collections::HashMap,
-    hash::{BuildHasherDefault, Hasher},
+    hash::{BuildHasherDefault, Hash, Hasher},
     sync::Arc,
 };
 
@@ -214,11 +214,24 @@ impl SectionCache {
     }
 }
 
+/// A block cell that hashes each coordinate through `Hasher::write_i32`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct CellKey([i32; 3]);
+
+impl Hash for CellKey {
+    /// Writes the three coordinates in order without a slice length prefix.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for coordinate in self.0 {
+            state.write_i32(coordinate);
+        }
+    }
+}
+
 /// Each block cell's camera shapes, read once and reused by later scans while the world is
 /// unchanged, as it is across one frame's particle collisions.
 #[derive(Default)]
 pub struct CameraShapeCache {
-    cells: HashMap<[i32; 3], (u32, u32), BuildHasherDefault<CellHasher>>,
+    cells: HashMap<CellKey, (u32, u32), BuildHasherDefault<CellHasher>>,
     shapes: Vec<Aabb>,
     section: SectionCache,
 }
@@ -246,7 +259,8 @@ impl PaletteWorld<'_> {
             for z in min[2]..=max[2] {
                 for y in min[1]..=max[1] {
                     let cell = [x, y, z];
-                    let (start, end) = match cells.get(&cell) {
+                    let key = CellKey(cell);
+                    let (start, end) = match cells.get(&key) {
                         Some(range) => *range,
                         None => {
                             let start = shapes.len() as u32;
@@ -261,7 +275,7 @@ impl PaletteWorld<'_> {
                                 },
                             )?;
                             let range = (start, shapes.len() as u32);
-                            cells.insert(cell, range);
+                            cells.insert(key, range);
                             range
                         }
                     };
@@ -307,5 +321,43 @@ impl Hasher for CellHasher {
 
     fn finish(&self) -> u64 {
         self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Records coordinate writes and rejects byte or slice-length hashing.
+    #[derive(Default)]
+    struct CountingHasher {
+        coordinates: Vec<i32>,
+    }
+
+    impl Hasher for CountingHasher {
+        /// Rejects any hashing path that writes bytes instead of whole coordinates.
+        fn write(&mut self, _: &[u8]) {
+            panic!("cell keys must use write_i32 for each coordinate");
+        }
+
+        /// Records each coordinate passed to the typed hashing path.
+        fn write_i32(&mut self, coordinate: i32) {
+            self.coordinates.push(coordinate);
+        }
+
+        /// Returns a placeholder digest; this hasher only counts writes.
+        fn finish(&self) -> u64 {
+            0
+        }
+    }
+
+    #[test]
+    fn cell_key_hashes_once_per_coordinate() {
+        for coordinates in [[0; 3], [1, -2, 3], [i32::MIN, 0, i32::MAX]] {
+            let mut hasher = CountingHasher::default();
+            CellKey(coordinates).hash(&mut hasher);
+            assert_eq!(hasher.coordinates.len(), 3);
+            assert_eq!(hasher.coordinates, coordinates);
+        }
     }
 }
