@@ -4,8 +4,8 @@
 //! them, and closing them captures the mouse again.
 
 use client_ui::ui_runtime::UiRuntime;
-use oreui::RESUME_LABEL;
 use launcher::menu::settings_options::key_name;
+use oreui::RESUME_LABEL;
 
 use super::MenuRuntime;
 
