@@ -42,6 +42,8 @@ mod potted_plants;
 mod sea_pickle;
 #[path = "tests/shelf_cake.rs"]
 mod shelf_cake;
+#[path = "tests/trapdoor.rs"]
+mod trapdoor;
 #[path = "tests/tripwire_hook.rs"]
 mod tripwire_hook;
 
@@ -221,6 +223,7 @@ fn visual_family_dispatch_uses_explicit_ordered_outcomes() {
 /// Builds one canonical-shaped air record at an arbitrary wire identity.
 fn synthetic_air_record(sequential_id: u32, network_hash: u32) -> RegistryRecord {
     RegistryRecord {
+        beacon_tint: assets::BeaconTint::Unresolved,
         sequential_id,
         network_hash,
         name: "minecraft:air".into(),
