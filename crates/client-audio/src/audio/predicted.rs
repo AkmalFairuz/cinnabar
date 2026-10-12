@@ -58,7 +58,7 @@ fn center(cell: [i32; 3]) -> [f32; 3] {
 
 /// The player sound event voiced while `identifier` is being consumed.
 pub fn is_consumable(identifier: &str) -> Option<&'static str> {
-    use client_world::consumables::{ConsumeAnimation, consume_animation};
+    use actor_animation::consumables::{ConsumeAnimation, consume_animation};
     match consume_animation(identifier)? {
         _ if identifier == "minecraft:honey_bottle" => Some("drink.honey"),
         ConsumeAnimation::Drink => Some("drink"),

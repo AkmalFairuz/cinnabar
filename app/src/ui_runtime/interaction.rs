@@ -392,7 +392,11 @@ impl DropSwing<'_> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    reason = "Bevy limits systems to 16 parameters, so related inputs share tuples."
+)]
 pub(crate) fn drive_chat_keyboard_input(
     mut player_runtime: bevy::prelude::ResMut<client_state::PlayerRuntime>,
     gamepads: Query<&Gamepad>,

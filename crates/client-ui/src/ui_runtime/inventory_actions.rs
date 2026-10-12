@@ -515,6 +515,7 @@ impl UiRuntime {
         .then_some(target)
     }
 
+    /// Shift-clicks a hit using the current mount equipment admission.
     fn quick_move_hit(
         &mut self,
         player_runtime: &mut player_state::PlayerState,
@@ -533,9 +534,17 @@ impl UiRuntime {
                 self.activate_widget(player_runtime, Widget::Close)
             }
             hit => match gesture_target(hit) {
-                Some(target) => self
-                    .inventory_ledger_mut(player_runtime)
-                    .begin_quick_move(target),
+                Some(target) => {
+                    let equipment = self.screen_state().mount_equipment;
+                    let ledger = self.inventory_ledger_mut(player_runtime);
+                    if ledger.window_kind() == Some(WindowKind::Horse) {
+                        ledger.begin_quick_move_with_storage_filter(target, |slot| {
+                            equipment.permits_inventory_slot(slot)
+                        })
+                    } else {
+                        ledger.begin_quick_move(target)
+                    }
+                }
                 None => Err(InventoryGestureError::InvalidRequest),
             },
         }
