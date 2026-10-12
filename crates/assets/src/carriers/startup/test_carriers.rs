@@ -20,6 +20,7 @@ pub fn synthetic_entity_assets(seed: u8) -> CompiledEntityAssets {
     CompiledEntityAssets {
         item_use_profiles: Box::new([]),
         seat_layouts: Box::new([]),
+        interaction_traits: Box::new([]),
         source_manifest_sha256: manifest(),
         block_visual_count: 0,
         sources: vec![EntityAssetSource {
@@ -59,6 +60,23 @@ pub fn synthetic_entity_assets(seed: u8) -> CompiledEntityAssets {
     }
     .with_unresolved_item_use()
     .with_unresolved_seats()
+    .with_unresolved_interactions()
+}
+
+/// Binds an original independent entity inventory to the admitted compatibility interactions.
+pub fn synthetic_interaction_assets(identifier: &str) -> CompiledEntityAssets {
+    let mut compiled = synthetic_entity_assets(1);
+    compiled.symbols[0].identifier = identifier.into();
+    let (source_bytes, source_sha256) = crate::interactions::source_identity();
+    let mut sources = compiled.sources.into_vec();
+    sources.push(EntityAssetSource {
+        path: crate::interactions::SOURCE_PATH.into(),
+        source_bytes,
+        source_sha256,
+    });
+    compiled.sources = sources.into();
+    compiled.interaction_traits = crate::interactions::compile(&compiled.symbols);
+    compiled.with_unresolved_seats()
 }
 
 /// An atmosphere carrier with flat sun, moon and cloud textures.

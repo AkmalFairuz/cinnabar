@@ -151,6 +151,7 @@ fn entities() -> Box<[u8]> {
         &CompiledEntityAssets {
             item_use_profiles: Box::new([]),
             seat_layouts: Box::new([]),
+            interaction_traits: Box::new([]),
             source_manifest_sha256: [1; 32],
             block_visual_count: 0,
             sources: vec![EntityAssetSource {
@@ -189,7 +190,8 @@ fn entities() -> Box<[u8]> {
             render: Default::default(),
         }
         .with_unresolved_item_use()
-        .with_unresolved_seats(),
+        .with_unresolved_seats()
+        .with_unresolved_interactions(),
     )
     .unwrap()
 }

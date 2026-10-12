@@ -82,6 +82,7 @@ pub(super) fn assets(identifier: &str) -> Arc<RuntimeEntityAssets> {
     let compiled = CompiledEntityAssets {
         item_use_profiles: Box::new([]),
         seat_layouts: Box::new([]),
+        interaction_traits: Box::new([]),
         source_manifest_sha256: [1; 32],
         block_visual_count: 1,
         sources,
@@ -136,6 +137,7 @@ pub(super) fn assets(identifier: &str) -> Arc<RuntimeEntityAssets> {
         render: EntityRenderData::default(),
     }
     .with_unresolved_item_use()
-    .with_unresolved_seats();
+    .with_unresolved_seats()
+    .with_unresolved_interactions();
     Arc::new(RuntimeEntityAssets::from_compiled(compiled).unwrap())
 }

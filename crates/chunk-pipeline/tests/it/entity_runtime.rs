@@ -97,6 +97,7 @@ fn compiled_entity_assets(fallback: EntityRigFallback) -> CompiledEntityAssets {
     CompiledEntityAssets {
         item_use_profiles: Box::new([]),
         seat_layouts: Box::new([]),
+        interaction_traits: Box::new([]),
         source_manifest_sha256: [0x44; 32],
         block_visual_count: 1,
         sources,
@@ -288,6 +289,7 @@ fn compiled_entity_assets(fallback: EntityRigFallback) -> CompiledEntityAssets {
     }
     .with_unresolved_item_use()
     .with_unresolved_seats()
+    .with_unresolved_interactions()
 }
 
 fn decode_entity_assets(compiled: &CompiledEntityAssets) -> Arc<RuntimeEntityAssets> {

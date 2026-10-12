@@ -49,6 +49,7 @@ fn block_fixture() -> (EquipmentRuntime, ActorRigSubmission, WornItem) {
         assets::CompiledEntityAssets {
             item_use_profiles: Box::new([]),
             seat_layouts: Box::new([]),
+            interaction_traits: Box::new([]),
             source_manifest_sha256: [1; 32],
             block_visual_count: 8,
             sources: vec![assets::EntityAssetSource {
@@ -87,7 +88,8 @@ fn block_fixture() -> (EquipmentRuntime, ActorRigSubmission, WornItem) {
             render: Default::default(),
         }
         .with_unresolved_item_use()
-        .with_unresolved_seats(),
+        .with_unresolved_seats()
+        .with_unresolved_interactions(),
     )
     .unwrap();
     let icons =

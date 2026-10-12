@@ -34,6 +34,7 @@ fn item_assets() -> Arc<RuntimeEntityAssets> {
     let compiled = CompiledEntityAssets {
         item_use_profiles: Box::new([]),
         seat_layouts: Box::new([]),
+        interaction_traits: Box::new([]),
         source_manifest_sha256: [0x31; 32],
         block_visual_count: 1,
         sources: vec![
@@ -155,7 +156,8 @@ fn item_assets() -> Arc<RuntimeEntityAssets> {
         render: Default::default(),
     }
     .with_unresolved_item_use()
-    .with_unresolved_seats();
+    .with_unresolved_seats()
+    .with_unresolved_interactions();
     let bytes = encode_entity_blob(&compiled).unwrap();
     Arc::new(RuntimeEntityAssets::decode(&bytes).unwrap())
 }

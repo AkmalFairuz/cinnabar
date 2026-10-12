@@ -174,6 +174,11 @@ fn synthetic_entity_blob_with_manifest(seed: u8, source_manifest_sha256: [u8; 32
             admission: assets::entity::seats::EntitySeatAdmission::Unresolved,
         }]
         .into_boxed_slice(),
+        interaction_traits: vec![assets::interactions::EntityInteractionDescriptor {
+            identifier: "minecraft:allay".into(),
+            traits: assets::interactions::EntityInteractionTraits::Unresolved,
+        }]
+        .into_boxed_slice(),
         source_manifest_sha256,
         block_visual_count: 0,
         sources: vec![EntityAssetSource {

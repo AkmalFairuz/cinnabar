@@ -185,6 +185,7 @@ fn with_equipment_geometry(
         item_visual_aliases: entities.item_visual_aliases().into(),
         item_use_profiles: entities.item_use_profiles().into(),
         seat_layouts: entities.seat_layouts().into(),
+        interaction_traits: assets::interactions::compile(entities.symbols()),
         render: entities.render_data().clone(),
     };
     for clip in &mut compiled.animation_clips {

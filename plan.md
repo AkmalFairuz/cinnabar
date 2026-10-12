@@ -7735,7 +7735,7 @@ replacements. Unknown mounts no longer inherit horse equipment cells in JSON-UI,
 fallback drawing, pointer handling and quick-move routing. Active equippable
 components, accepted items, conditional activation, advertised custom bases and
 later mount layouts remain incomplete and do not close the entity parity gate.
-Entity carrier 19 requires a `make assets` rebuild.
+Entity carrier 20 requires a `make assets` rebuild.
 
 ### Compiled furnace fuel admission (incomplete)
 
@@ -7782,11 +7782,21 @@ performance parity remain incomplete.
 
 Effective item durability is shared through required entity-carrier descriptors and session registry admission. Unknown entries and invalid declared maxima stay unresolved; UI and elytra gameplay read the admitted numeric-ID fact. This gate remains incomplete: the full damageable item inventory, native class bindings, numeric component bounds and all network replacement behavior still need verification. The pinned base table preserves the existing positive values and its coverage guard checks their membership in the independent retail inventory.
 
+Compiled entity interaction traits remain incomplete. The entity carrier admits separate
+pick, placement-obstruction and aim dispositions, checks every independently collected
+entity identity, and retains the existing class routes as provisional compatibility data.
+Actor admission resolves advertised bases once, preserves the first advertisement,
+refreshes earlier actors, and caches numeric dispositions for frame and ray consumers.
+Unadvertised identities and unadmitted nonempty bases remain unresolved. Empty
+advertised bases retain an explicit provisional generic-mob disposition. Complete native constructor,
+mutable component, spectator pick/obstruction and class inventories are still open;
+the generic-mob disposition remains provisional and does not close a parity gate.
+
 Compiled seat descriptors are incomplete. Every independently collected entity has a seat admission, including unresolved definitions. Authored base layouts, bounded rider counts, literal rotations and Molang rotation references are compiled before runtime; component-group names no longer select layouts. Actual group activation and rotation-expression evaluation remain unresolved, so those layouts retain streamed poses. Passenger ordering, mutable rideable components, session behavior overlays and complete native layout coverage remain open. Static count selection preserves the existing compatibility order and is provisional.
 
 ## Held-item grip admission (incomplete parity)
 
-Item grip facts are compiled into entity carrier 19, checked against the separate
+Item grip facts are compiled into entity carrier 20, checked against the separate
 retail identity inventory and copied through numeric item admission into equipment
 input. Unknown names cannot borrow a tool grip. Explicit session flags, including
 false, replace the compiled upright choice. The existing built-in grip and rod-art

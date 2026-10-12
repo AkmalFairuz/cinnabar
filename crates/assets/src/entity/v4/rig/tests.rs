@@ -6,6 +6,7 @@ fn shared_controller_graph() -> CompiledEntityAssets {
     let mut compiled = CompiledEntityAssets {
         item_use_profiles: Box::new([]),
         seat_layouts: Box::new([]),
+        interaction_traits: Box::new([]),
         source_manifest_sha256: [1; 32],
         block_visual_count: 0,
         sources: Box::new([]),
@@ -32,7 +33,8 @@ fn shared_controller_graph() -> CompiledEntityAssets {
         render: Default::default(),
     }
     .with_unresolved_item_use()
-    .with_unresolved_seats();
+    .with_unresolved_seats()
+    .with_unresolved_interactions();
     compiled.controllers = (0..4)
         .map(|index| EntityAnimationController {
             symbol: 0,

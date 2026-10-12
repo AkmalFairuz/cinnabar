@@ -1,11 +1,10 @@
-use std::sync::Arc;
-
 use serde::{Deserialize, Serialize};
 
 use crate::AssetError;
 use crate::item::{ItemVisualAlias, ItemVisualDefinition};
 
 mod geometry;
+pub mod interactions;
 pub mod item_use;
 mod molang_program;
 mod query_manifest;
@@ -59,8 +58,8 @@ pub use v4::{
 };
 
 pub const ENTITY_BLOB_MAGIC: [u8; 8] = *b"MCBEENT3";
-/// Includes item-use profiles and seat admissions; stale carriers require `make assets`.
-pub const ENTITY_BLOB_VERSION: u32 = 19;
+/// Includes item-use, seat and interaction admissions; stale carriers need `make assets`.
+pub const ENTITY_BLOB_VERSION: u32 = 20;
 /// Actor rig id ranges (a rig id is a `u32`):
 /// - `0..PACK_RIG_ID_BASE`: vanilla catalog rig-geometry bindings, and from `0x2000_0000`
 ///   the catalog geometries render controllers draw beside the rig (`0x2000_0000 + index`).
@@ -266,6 +265,7 @@ pub struct CompiledEntityAssets {
     pub item_use_profiles: Box<[item_use::ItemUseDescriptor]>,
     pub seat_layouts: Box<[seats::EntitySeatDescriptor]>,
     pub source_manifest_sha256: [u8; 32],
+    pub interaction_traits: Box<[interactions::EntityInteractionDescriptor]>,
     pub block_visual_count: u32,
     pub sources: Box<[EntityAssetSource]>,
     pub symbols: Box<[EntityAssetSymbol]>,
@@ -296,6 +296,7 @@ pub struct CompiledEntityAssets {
 struct EntityCatalogPayload {
     item_use_profiles: Box<[item_use::ItemUseDescriptor]>,
     seat_layouts: Box<[seats::EntitySeatDescriptor]>,
+    interaction_traits: Box<[interactions::EntityInteractionDescriptor]>,
     block_visual_count: u32,
     sources: Box<[EntityAssetSource]>,
     symbols: Box<[EntityAssetSymbol]>,
@@ -323,6 +324,13 @@ struct EntityCatalogPayload {
 
 /// An encoded entity carrier payload.
 pub type EntityCarrierBlob = Box<[u8]>;
+
+impl CompiledEntityAssets {
+    /// Rebuilds the identity-keyed seat and interaction entries as unresolved from `symbols`.
+    pub fn with_unresolved_admissions(self) -> Self {
+        self.with_unresolved_seats().with_unresolved_interactions()
+    }
+}
 
 mod runtime;
 pub use runtime::RuntimeEntityAssets;
