@@ -64,6 +64,7 @@ mod decode;
 mod diagnostics;
 mod dimension_transfer;
 mod dirty;
+mod entity_occlusion;
 mod helpers;
 mod light_diagnostics;
 mod light_queries;

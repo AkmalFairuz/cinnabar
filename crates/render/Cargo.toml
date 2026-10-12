@@ -25,6 +25,7 @@ enhanced-diagnostics = ["enhanced", "render-model/enhanced-diagnostics", "render
 
 [dependencies]
 async-platform = { path = "../async-platform" }
+env-compat = { path = "../env-compat" }
 web-time.workspace = true
 render-scene = { path = "../render-scene" }
 block-transform = { path = "../block-transform" }

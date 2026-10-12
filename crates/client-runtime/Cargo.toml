@@ -10,6 +10,7 @@ local-mods = []
 test-support = ["client-session/test-support"]
 
 [dependencies]
+env-compat = { path = "../env-compat" }
 anyhow.workspace = true
 bevy.workspace = true
 bridge = { path = "../bridge" }
@@ -28,6 +29,7 @@ protocol = { path = "../protocol" }
 render = { path = "../render" }
 render-scene = { path = "../render-scene" }
 render-api = { path = "../render-api" }
+simulation-clock = { path = "../simulation-clock" }
 tokio.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

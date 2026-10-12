@@ -84,6 +84,7 @@ fn stack(packs: &[&[(&str, Vec<u8>)]]) -> LayeredPackView {
     let archives = packs
         .iter()
         .enumerate()
+        .rev()
         .map(|(index, files)| {
             let id = format!("00000000-0000-0000-0000-{index:012}");
             let manifest = format!(
@@ -222,6 +223,7 @@ fn custom_block_sheet_material_flags_survive_session_icon_compilation() {
     ] {
         let overlay = BlockOverlay {
             visuals: vec![BlockVisual {
+                native_material: assets::native_material::NativeMaterialFacts::Unresolved,
                 faces: [1; 6],
                 flags: BlockFlags::CUBE_GEOMETRY,
                 kind: VisualKind::Cube,
@@ -261,6 +263,7 @@ fn custom_block_sheet_material_flags_survive_session_icon_compilation() {
                 collides: true,
                 collision_boxes: None,
                 selection: Default::default(),
+                friction: None,
                 visual: Default::default(),
             }]
             .into(),
@@ -293,6 +296,7 @@ fn registry_items_named_after_custom_blocks_are_block_items() {
             collides: true,
             collision_boxes: None,
             selection: Default::default(),
+            friction: None,
             visual: Default::default(),
         }]
         .into(),

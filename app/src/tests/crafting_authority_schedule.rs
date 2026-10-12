@@ -6,6 +6,7 @@ use ::acceptance::AcceptanceRun;
 use bevy::ecs::system::RunSystemOnce;
 use client_shell::ui_resources::UiRuntimeResource;
 use client_state::PlayerRuntime;
+use simulation_clock::identity::SessionGeneration;
 #[path = "latency_fences.rs"]
 mod latency_fences;
 
@@ -20,7 +21,7 @@ use {
     crate::{
         environment::{WeatherState, WorldClock, bind_session_generation},
         runtime::{
-            phase3_evidence::Phase3EvidenceEmitter,
+            movement_evidence::MovementEvidenceEmitter,
             world::{
                 ClientWorld, WorldStreamFramePoll, drain_committed_ui_before_authority,
                 reconcile_world_stream_before_physics,
@@ -97,7 +98,7 @@ fn app() -> App {
     .init_resource::<LocalViewPose>()
     .init_resource::<LocalPlayerFrameCarrier>()
     .init_resource::<InteractionOriginSnapshot>()
-    .init_resource::<Phase3EvidenceEmitter>()
+    .init_resource::<MovementEvidenceEmitter>()
     .init_resource::<WorldStreamFramePoll>()
     .init_resource::<ServerCameraInstructions>()
     .add_message::<SequencedAudioEvent>()
@@ -119,8 +120,8 @@ fn ingress(app: &mut App, sequence: u64, event: InventoryEvent) {
             player_runtime,
             runtime,
             SequencedWorldEvent {
-                session_generation: 1,
-                sequence,
+                session_generation: SessionGeneration::new(1),
+                sequence: protocol::identity::FifoSequence::new(sequence),
                 event: WorldEvent::Inventory(event),
             },
         )
@@ -455,8 +456,8 @@ fn registry_ingress(app: &mut App, sequence: u64, registry: ItemRegistryEvent) {
             player_runtime,
             runtime,
             &SequencedWorldEvent {
-                session_generation: 1,
-                sequence,
+                session_generation: SessionGeneration::new(1),
+                sequence: protocol::identity::FifoSequence::new(sequence),
                 event: WorldEvent::ItemActor(protocol::ItemActorEvent::Registry(registry)),
             },
         )

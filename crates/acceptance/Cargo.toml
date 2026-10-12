@@ -9,6 +9,7 @@ publish = false
 test-support = []
 
 [dependencies]
+env-compat = { path = "../env-compat" }
 web-time.workspace = true
 client-audio = { path = "../client-audio" }
 anyhow.workspace = true
