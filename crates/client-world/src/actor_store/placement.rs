@@ -382,11 +382,11 @@ fn compiled_seat(
     let layout = layouts
         .iter()
         .find(|layout| layout.selector == SeatSelector::Base)?;
-    let mut usable = layout
+    let usable = layout
         .seats
         .iter()
         .filter(|seat| (seat.min_riders..=seat.max_riders).contains(&riders));
-    let seat = usable.clone().nth(index).or_else(|| usable.next_back())?;
+    let seat = usable.clone().nth(index).or_else(|| usable.last())?;
     let rotate_by = match seat.rotation {
         SeatRotation::Absent => None,
         SeatRotation::Literal(degrees) => Some(degrees.get()),
