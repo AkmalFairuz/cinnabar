@@ -5359,6 +5359,7 @@ dependencies = [
  "anyhow",
  "async-io",
  "bridge",
+ "bytes",
  "crossbeam-channel",
  "ctrlc",
  "futures-lite",

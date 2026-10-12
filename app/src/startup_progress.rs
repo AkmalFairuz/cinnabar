@@ -43,7 +43,7 @@ fn send(progress: &StartupProgress<'_>) {
 /// client is ready.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn report_ui_upload(
-    stats: bevy::prelude::Res<render::UiRenderStatsResource>,
+    stats: bevy::prelude::Res<render_scene::UiRenderStatsResource>,
     mut ready: bevy::prelude::Local<bool>,
 ) {
     if *ready {
