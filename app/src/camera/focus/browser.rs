@@ -77,8 +77,10 @@ pub(super) fn install_click_capture() {
             canvas.request_pointer_lock();
         }
     });
+    // winit cancels the canvas's `pointerdown`, so browsers fire no `mousedown` after it; a
+    // mouse's `pointerdown` still activates the page.
     let _ =
-        document.add_event_listener_with_callback("mousedown", listener.as_ref().unchecked_ref());
+        document.add_event_listener_with_callback("pointerdown", listener.as_ref().unchecked_ref());
     // The listener lives as long as the page.
     listener.forget();
 }
