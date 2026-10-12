@@ -2947,6 +2947,7 @@ dependencies = [
  "launcher",
  "launcher-host",
  "objc2-metal 0.3.2",
+ "oreui",
  "pack-runtime",
  "player-state",
  "protocol",

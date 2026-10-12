@@ -29,6 +29,7 @@ chunk-pipeline = { path = "../chunk-pipeline" }
 client-session = { path = "../client-session" }
 client-state = { path = "../client-state" }
 client-ui = { path = "../client-ui" }
+oreui = { path = "../oreui" }
 json-ui = { path = "../json-ui" }
 launcher = { path = "../launcher" }
 launcher-host = { path = "../launcher-host" }
