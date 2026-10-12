@@ -7735,7 +7735,7 @@ replacements. Unknown mounts no longer inherit horse equipment cells in JSON-UI,
 fallback drawing, pointer handling and quick-move routing. Active equippable
 components, accepted items, conditional activation, advertised custom bases and
 later mount layouts remain incomplete and do not close the entity parity gate.
-Entity carrier 20 requires a `make assets` rebuild.
+Entity carrier 21 requires a `make assets` rebuild.
 
 ### Compiled furnace fuel admission (incomplete)
 
@@ -7765,6 +7765,14 @@ numerical behavior; unclassified states remain unresolved and keep the previous 
 numerical defaults. No ordinary movement classification is inferred from absence of a special
 rule. Complete native ordinary/special coverage, custom session movement components and
 all provisional rule values still require verification before this gate can close.
+Rig placement and target-rotation frames are compiled and carried with the selected
+rig. Their compatibility source preserves existing absolute-frame routes, while
+other identities remain explicitly unresolved and retain the body-yaw fallback.
+Presentation and target-rotation queries consume cached frames. Complete native
+class coverage, custom advertised-base admission, active component overrides and
+ordinary-body frame classification remain incomplete. Camera-query presence does
+not establish a placement frame.
+
 Item-use descriptor admission is incomplete. The carrier records explicit unresolved items against the independently collected item-visual inventory. Gameplay, animation durations, consume audio, first-person consumption and cooldown publication read numerical admissions with session component overlays. A duration alone grants no use kind or movement penalty. The stock compatibility catalog, complete native use-kind census, authored cooldown timing, special appetite modes and conflicting component/class semantics remain provisional. Authored and session facts share whole-tick conversion. Cooldown quantization and component-version precedence remain provisional.
 
 
@@ -7796,7 +7804,7 @@ Compiled seat descriptors are incomplete. Every independently collected entity h
 
 ## Held-item grip admission (incomplete parity)
 
-Item grip facts are compiled into entity carrier 20, checked against the separate
+Item grip facts are compiled into entity carrier 21, checked against the separate
 retail identity inventory and copied through numeric item admission into equipment
 input. Unknown names cannot borrow a tool grip. Explicit session flags, including
 false, replace the compiled upright choice. The existing built-in grip and rod-art
