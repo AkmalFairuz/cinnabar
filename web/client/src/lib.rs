@@ -96,7 +96,7 @@ pub fn sound_bank_header_bytes() -> usize {
 /// The length of a sound bank's index prefix, read from its first [`sound_bank_header_bytes`].
 #[wasm_bindgen]
 pub fn sound_bank_prefix_length(header: &[u8]) -> Result<usize, JsError> {
-    assets::sound_bank_prefix_len(header).map_err(|error| JsError::new(&error.to_string()))
+    assets::sound_bank::sound_bank_prefix_len(header).map_err(|error| JsError::new(&error.to_string()))
 }
 
 /// How many bytes of hash end a sound bank's prefix; they name its contents.
@@ -111,7 +111,7 @@ pub fn sound_bank_hash_bytes() -> usize {
 #[wasm_bindgen]
 #[must_use]
 pub fn sound_bank_prefix_valid(prefix: &[u8]) -> bool {
-    assets::SoundBankIndex::decode_prefix(prefix).is_ok()
+    assets::sound_bank::SoundBankIndex::decode_prefix(prefix).is_ok()
 }
 
 #[wasm_bindgen]

@@ -27,6 +27,7 @@ world = { path = "../world" }
 tokio = { workspace = true, features = ["fs", "net", "rt-multi-thread"] }
 
 [dev-dependencies]
+test-alloc = { path = "../test-alloc" }
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 uuid.workspace = true
 

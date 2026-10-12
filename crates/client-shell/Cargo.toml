@@ -29,6 +29,7 @@ chunk-pipeline = { path = "../chunk-pipeline" }
 client-session = { path = "../client-session" }
 client-state = { path = "../client-state" }
 client-ui = { path = "../client-ui" }
+oreui = { path = "../oreui" }
 json-ui = { path = "../json-ui" }
 launcher = { path = "../launcher" }
 launcher-host = { path = "../launcher-host" }
@@ -63,6 +64,7 @@ ash = "0.38"
 launcher = { path = "../launcher", features = ["test-support"] }
 launcher-host = { path = "../launcher-host", features = ["test-support"] }
 client-ui = { path = "../client-ui", features = ["test-support"] }
+ui-engine = { path = "../ui-engine", features = ["test-support"] }
 client-world = { path = "../client-world" }
 player-state = { path = "../player-state" }
 protocol = { path = "../protocol", features = ["test-support"] }

@@ -3,7 +3,8 @@
 //! containers, forms, dialogs, the sign editor and the pause menu open and says how to close
 //! them, and closing them captures the mouse again.
 
-use client_ui::ui_runtime::{UiRuntime, presentation::forms::oreui::RESUME_LABEL};
+use client_ui::ui_runtime::UiRuntime;
+use oreui::RESUME_LABEL;
 use launcher::menu::settings_options::key_name;
 
 use super::MenuRuntime;

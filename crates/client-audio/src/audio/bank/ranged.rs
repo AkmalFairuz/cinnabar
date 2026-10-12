@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use assets::SoundBankEntry;
+use assets::sound_bank::SoundBankEntry;
 use js_sys::{ArrayBuffer, Uint8Array};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
