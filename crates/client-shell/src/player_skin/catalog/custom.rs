@@ -31,7 +31,10 @@ pub fn import(
             source.to_owned()
         };
         let geometry_paths = [png.with_extension("json"), png.with_extension("geo.json")];
-        let paths: Vec<_> = geometry_paths.iter().filter(|path| files::exists(path)).collect();
+        let paths: Vec<_> = geometry_paths
+            .iter()
+            .filter(|path| files::exists(path))
+            .collect();
         if paths.len() > 1 {
             return Err("The skin has multiple geometry files. Keep one matching JSON file or import a skin pack.".to_owned());
         }

@@ -1,8 +1,8 @@
 //! Runtime skin catalog and private imported-image and model persistence.
 
+use super::files;
 use launcher::dressing_room::{DressingRoomSkin, DressingRoomView, SkinModel};
 use serde::{Deserialize, Serialize};
-use super::files;
 #[cfg(test)]
 use std::fs;
 use std::io::Cursor;

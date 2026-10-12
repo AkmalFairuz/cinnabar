@@ -101,14 +101,21 @@ pub(super) fn pick_in_page(cape: bool, commands: crossbeam_channel::Sender<super
             .dyn_into()
             .ok()?;
         let extensions: Array = if cape {
-            ["png"].iter().map(|extension| JsValue::from_str(extension)).collect()
+            ["png"]
+                .iter()
+                .map(|extension| JsValue::from_str(extension))
+                .collect()
         } else {
             ["png", "json", "mcpack"]
                 .iter()
                 .map(|extension| JsValue::from_str(extension))
                 .collect()
         };
-        let promise: Promise = pick.call1(&JsValue::NULL, &extensions).ok()?.dyn_into().ok()?;
+        let promise: Promise = pick
+            .call1(&JsValue::NULL, &extensions)
+            .ok()?
+            .dyn_into()
+            .ok()?;
         let picked: Array = wasm_bindgen_futures::JsFuture::from(promise)
             .await
             .ok()?

@@ -101,7 +101,10 @@ struct Library {
 
 impl Library {
     /// Loads the library and the outcome that publishes it against the client's current skin.
-    fn load(layout: InstallLayout, fallback: &crate::player_skin::LocalPlayerSkin) -> (Self, Outcome) {
+    fn load(
+        layout: InstallLayout,
+        fallback: &crate::player_skin::LocalPlayerSkin,
+    ) -> (Self, Outcome) {
         let view = crate::player_skin::catalog::load(&layout, fallback);
         let outcome = Outcome::new(
             &view,

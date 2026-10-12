@@ -84,9 +84,9 @@ mod imp {
     }
 
     fn decode(text: &[u8]) -> io::Result<Vec<u8>> {
-        STANDARD
-            .decode(text)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "a browser skin file is damaged"))
+        STANDARD.decode(text).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "a browser skin file is damaged")
+        })
     }
 
     pub fn read_bounded(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
@@ -112,7 +112,10 @@ mod imp {
 
     pub fn write_new(path: &Path, bytes: &[u8]) -> io::Result<()> {
         if exists(path) {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "the browser file exists"));
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "the browser file exists",
+            ));
         }
         write(path, bytes)
     }
@@ -125,7 +128,10 @@ mod imp {
 
     pub fn remove_file(path: &Path) -> io::Result<()> {
         if !exists(path) {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "no such browser file"));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "no such browser file",
+            ));
         }
         browser_files::remove(path)
     }
