@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+simulation-clock = { path = "../simulation-clock" }
 actor-animation = { path = "../actor-animation" }
 async-platform = { path = "../async-platform" }
 web-time.workspace = true
@@ -21,6 +22,7 @@ world = { path = "../world" }
 
 [dev-dependencies]
 actor-animation = { path = "../actor-animation", features = ["test-support"] }
+assets = { path = "../assets", features = ["test-support"] }
 test-time = { path = "../test-time" }
 protocol = { path = "../protocol", features = ["test-support"] }
 

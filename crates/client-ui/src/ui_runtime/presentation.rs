@@ -1,7 +1,6 @@
 use std::{fmt, sync::Arc};
 
 use assets::{RuntimeFontCatalog, RuntimeHudCatalog, RuntimeIconCatalog};
-use bevy::prelude::Resource;
 use render_model::{UiRenderInput, UiRenderTextureArray};
 use sha2::{Digest, Sha256};
 
@@ -18,7 +17,6 @@ mod accessors;
 mod construction;
 pub mod debug_overlay;
 pub mod dynamic_textures;
-mod font_fallback;
 pub mod forms;
 mod frame;
 pub mod gui_models;
@@ -52,7 +50,6 @@ pub use forms::ServerUiPack;
 pub use session_glyphs::SessionGlyphSheets;
 pub use session_icons::{MAX_SESSION_ICON_SIDE, SessionIcon, SessionIcons};
 pub mod startup;
-pub mod text_metrics;
 pub mod texture_atlas;
 
 pub use debug_overlay::DebugLines;
@@ -65,17 +62,17 @@ use primitives::{bounded_visible_text, rect, resolve_chat_line};
 pub use publish::commit::refresh_hud_frame;
 pub use publish::{
     capture_hud_frame,
-    commit::{PendingUiPublication, PreparedUiPublication, PreviewCapture, render_prepared_ui},
+    commit::{PendingUiPublication, PreviewCapture, render_prepared_ui},
     item_icons::ItemIconFrames,
 };
 use retained_hud::{PresentedScoreboardCache, ScoreboardOwnerNameAuthority};
 use startup::StartupPresentationState;
-use text_metrics::TextMetrics;
 use texture_atlas::{
     HudTexturePages, font_texture_array, font_texture_array_with_hud_and_icons,
     font_texture_array_with_optional_hud,
 };
 use ui::IconRef;
+use ui_engine::text_metrics::TextMetrics;
 
 const TEXT_CACHE_ENTRIES: usize = 1_024;
 const TEXT_CACHE_BYTES: usize = 8 * 1024 * 1024;
@@ -98,9 +95,9 @@ impl fmt::Display for UiPresentationError {
 
 impl std::error::Error for UiPresentationError {}
 
-impl From<forms::engine::screen::PaintError> for UiPresentationError {
-    fn from(error: forms::engine::screen::PaintError) -> Self {
-        use forms::engine::screen::PaintError;
+impl From<ui_engine::engine::screen::PaintError> for UiPresentationError {
+    fn from(error: ui_engine::engine::screen::PaintError) -> Self {
+        use ui_engine::engine::screen::PaintError;
         match error {
             PaintError::InvalidFontTexture => Self::InvalidFontTexture,
             PaintError::Geometry(error) => Self::Geometry(error),
@@ -110,13 +107,11 @@ impl From<forms::engine::screen::PaintError> for UiPresentationError {
     }
 }
 
-#[derive(Resource)]
 pub struct UiPresentationRuntime {
     font: Arc<RuntimeFontCatalog>,
     /// The startup font without the session's glyph sheets.
     base_font: Arc<RuntimeFontCatalog>,
     mod_panel_font: Option<mod_panel_font::InstalledFont>,
-    fallback_font: Option<Arc<RuntimeFontCatalog>>,
     textures: Arc<UiRenderTextureArray>,
     texture_session: Option<u64>,
     blank_dynamic_page: render_model::UiTexturePage,
@@ -214,7 +209,9 @@ pub struct UiPresentationRuntime {
     settings_slider_drag_targets: Vec<(MenuAction, UiRect)>,
     menu_scrolls: menu_scroll::MenuScrolls,
     /// The JSON-UI engine: catalogs, layout caches and animation state.
-    engine: Option<Box<forms::engine::FormEngine>>,
+    engine: Option<Box<ui_engine::engine::FormEngine>>,
+    /// The server UI pack last applied to the engine, compared by identity.
+    engine_pack: Option<Arc<ServerUiPack>>,
     /// The live catalog's screen settings, published to the runtime.
     screen_settings: Arc<super::scene_stack::ScreenSettingsTable>,
     /// Each screen family's own state, carried across builds.
