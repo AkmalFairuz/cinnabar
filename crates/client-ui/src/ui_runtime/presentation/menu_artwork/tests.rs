@@ -386,7 +386,7 @@ fn world_thumbnails_are_packed_from_memory_on_the_worlds_tab() {
         ..Default::default()
     }];
     let set = ArtworkSet {
-        images: view_images(&view),
+        images: view_images(&view, &[]),
         ..Default::default()
     };
     let keys: Vec<_> = sources(&set).iter().map(|source| source.key().0).collect();
@@ -394,7 +394,7 @@ fn world_thumbnails_are_packed_from_memory_on_the_worlds_tab() {
 
     view.screen = MenuScreen::Home;
     assert!(
-        view_images(&view).is_empty(),
+        view_images(&view, &[]).is_empty(),
         "other screens leave atlas room to theirs"
     );
 }

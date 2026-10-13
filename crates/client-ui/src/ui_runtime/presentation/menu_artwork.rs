@@ -581,13 +581,50 @@ pub fn view_paths(view: &launcher::menu::MenuView) -> Vec<(String, u32)> {
         .collect()
 }
 
-/// The worlds tab's thumbnails, held in memory rather than read from a file.
-fn view_images(view: &launcher::menu::MenuView) -> Vec<(String, Arc<[u8]>)> {
-    if view.screen != launcher::menu::MenuScreen::Play {
+/// The edited world first, or the worlds list's visible rows, within the atlas budget.
+fn view_images(
+    view: &launcher::menu::MenuView,
+    hits: &[(launcher::menu::MenuAction, ui::UiRect)],
+) -> Vec<(String, Arc<[u8]>)> {
+    use launcher::{
+        local_worlds::Screen,
+        menu::{MenuAction, MenuScreen},
+    };
+    if !matches!(view.screen, MenuScreen::Play | MenuScreen::Settings) {
         return Vec::new();
     }
-    view.local_worlds
+    if matches!(view.local.screen, Screen::Edit | Screen::ConfirmDelete) {
+        let edited = view
+            .local
+            .edited
+            .as_ref()
+            .map(|world| launcher::local_worlds::world::thumbnail_key(&world.id));
+        return view
+            .local_worlds
+            .iter()
+            .filter_map(|world| world.thumbnail.as_ref())
+            .find(|thumbnail| Some(&thumbnail.key) == edited.as_ref())
+            .map(|thumbnail| (thumbnail.key.clone(), Arc::clone(&thumbnail.image)))
+            .into_iter()
+            .collect();
+    }
+    if view.screen != MenuScreen::Play || view.local.screen != Screen::List {
+        return Vec::new();
+    }
+    let mut indices: Vec<_> = hits
         .iter()
+        .filter_map(|(action, _)| match action {
+            MenuAction::PlayLocalWorld(index) => Some(*index),
+            _ => None,
+        })
+        .collect();
+    // The first paint has no row geometry yet; it supplies the actual visible set next frame.
+    if indices.is_empty() {
+        indices.extend(0..view.local_worlds.len().min(FIRST_BATCH));
+    }
+    indices
+        .into_iter()
+        .filter_map(|index| view.local_worlds.get(index))
         .filter_map(|world| world.thumbnail.as_ref())
         .map(|thumbnail| (thumbnail.key.clone(), Arc::clone(&thumbnail.image)))
         .collect()
@@ -662,3 +699,6 @@ mod store_tests;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod world_preview_tests;

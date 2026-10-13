@@ -113,9 +113,14 @@ impl LocalWorlds {
     /// Applies finished world requests; call once per frame.
     pub fn pump(&mut self) {
         let Some(client) = &self.client else { return };
-        for event in client.drain() {
-            self.track_thumbnails(&event);
-            let effects = self.menu.apply(event);
+        for reply in client.drain() {
+            for (id, thumbnail) in reply.thumbnails {
+                self.thumbnails.entry(id).or_insert(thumbnail);
+            }
+            if let Event::Deleted(id) = &reply.event {
+                self.thumbnails.remove(id);
+            }
+            let effects = self.menu.apply(reply.event);
             self.dispatch(effects);
         }
     }
@@ -128,39 +133,12 @@ impl LocalWorlds {
 
     /// Keeps `image` as world `id`'s thumbnail and saves it beside the world.
     pub fn save_thumbnail(&mut self, id: &str, image: Vec<u8>) {
-        if let Some(manager) = &self.manager
-            && let Err(error) = manager.save_thumbnail(id, &image)
-        {
-            bevy::log::warn!(%error, "could not save the world thumbnail");
+        let image = Arc::from(image);
+        if let Some(client) = &self.client {
+            client.save_thumbnail(id.to_owned(), Arc::clone(&image));
         }
         self.thumbnails
-            .insert(id.to_owned(), WorldThumbnail::new(id, Arc::from(image)));
-    }
-
-    /// Reads the thumbnails of worlds a list or create answer names, and forgets deleted ones.
-    fn track_thumbnails(&mut self, event: &Event) {
-        let Some(manager) = &self.manager else {
-            return;
-        };
-        let worlds = match event {
-            Event::Listed(worlds) => worlds.as_slice(),
-            Event::Created(world) | Event::Updated(world) => std::slice::from_ref(world),
-            Event::Deleted(id) => {
-                self.thumbnails.remove(id);
-                return;
-            }
-            _ => return,
-        };
-        for world in worlds {
-            if !self.thumbnails.contains_key(&world.id)
-                && let Some(image) = manager.thumbnail(&world.id)
-            {
-                self.thumbnails.insert(
-                    world.id.clone(),
-                    WorldThumbnail::new(&world.id, Arc::from(image)),
-                );
-            }
-        }
+            .insert(id.to_owned(), WorldThumbnail::new(id, image));
     }
 
     /// Takes the id of a world that finished opening; the caller then joins the session endpoint.
@@ -256,69 +234,4 @@ impl Plugin for LocalWorldsPlugin {
 }
 
 #[cfg(test)]
-mod tests {
-    use {
-        super::*,
-        launcher::local_worlds::model::{Input, Screen},
-    };
-
-    #[test]
-    fn focus_only_pauses_while_playing_and_detached_is_inert() {
-        let mut worlds = LocalWorlds::default();
-        worlds.focus_changed(false);
-        worlds.pump();
-        assert!(!worlds.paused, "not in a world");
-        worlds.set_playing(true);
-        assert!(worlds.paused, "joined while unfocused");
-        worlds.focus_changed(true);
-        assert!(!worlds.paused);
-        worlds.leave_world();
-        assert!(!worlds.playing);
-    }
-
-    /// The pause menu pauses a single-player world and closing it resumes, as in vanilla.
-    #[test]
-    fn the_pause_menu_pauses_and_resumes_the_world() {
-        let mut worlds = LocalWorlds::default();
-        worlds.set_pause_menu(true);
-        assert!(!worlds.paused, "online play never pauses");
-        worlds.set_pause_menu(false);
-        worlds.set_playing(true);
-        worlds.set_pause_menu(true);
-        assert!(worlds.paused);
-        worlds.focus_changed(false);
-        worlds.set_pause_menu(false);
-        assert!(worlds.paused, "still unfocused");
-        worlds.focus_changed(true);
-        assert!(!worlds.paused);
-    }
-
-    #[test]
-    fn input_without_a_client_still_advances_the_model() {
-        let mut worlds = LocalWorlds::default();
-        worlds.input(Input::BeginCreate);
-        assert_eq!(worlds.menu().screen(), Screen::Create);
-        worlds.input(Input::Back);
-        worlds.input(Input::Refresh);
-        assert!(worlds.menu().busy());
-    }
-}
-
-#[cfg(test)]
-mod settings_tests {
-    use super::*;
-
-    /// Disabling focus pause preserves explicit pause-menu control.
-    #[test]
-    fn focus_preference_does_not_disable_explicit_pause() {
-        let mut worlds = LocalWorlds::default();
-        worlds.set_playing(true);
-        worlds.focus_changed(false);
-        assert!(worlds.paused);
-        worlds.pause_on_unfocus = false;
-        worlds.sync_pause();
-        assert!(!worlds.paused);
-        worlds.set_pause_menu(true);
-        assert!(worlds.paused);
-    }
-}
+mod tests;
