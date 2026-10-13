@@ -18,6 +18,8 @@ pub(super) enum PersonalWindow {
         generation: u64,
         window_id: i32,
         window_type: i8,
+        /// Transport admission survives the timeout so the late response still completes this close.
+        admitted: bool,
         deadline_millis: Option<u64>,
     },
 }
@@ -85,9 +87,19 @@ impl PlayerInventoryLedger {
         if self.personal_inventory_desired_open() {
             return true;
         }
-        // The open follows the close on the wire instead of being dropped.
+        // Replies carry no generation, so finish the previous lifecycle before retrying.
         if !self.pending_closes.is_empty()
-            || matches!(self.personal, Some(PersonalWindow::Closing { .. }))
+            || matches!(
+                self.personal,
+                Some(
+                    PersonalWindow::Closing { .. }
+                        | PersonalWindow::Opening {
+                            admitted: true,
+                            desired_open: false,
+                            ..
+                        }
+                )
+            )
         {
             self.held_open = Some(target_runtime_id);
             return true;
@@ -180,6 +192,7 @@ impl PlayerInventoryLedger {
                     generation,
                     window_id,
                     window_type,
+                    admitted: false,
                     deadline_millis: None,
                 });
                 generation
@@ -191,15 +204,55 @@ impl PlayerInventoryLedger {
         }
     }
 
-    /// Starts a held open once no close is unsent or awaiting its acknowledgement.
+    /// Starts a held open once the previous lifecycle and its queued closes have finished.
     pub(super) fn resume_held_open(&mut self) {
         if let Some(target_runtime_id) = self.held_open
             && self.pending_closes.is_empty()
-            && !matches!(self.personal, Some(PersonalWindow::Closing { .. }))
+            && self.personal.is_none()
         {
             self.held_open = None;
             self.request_personal_open(target_runtime_id);
         }
+    }
+
+    /// Tests the personal window's existing admitted deadline without mutating it.
+    pub(super) fn personal_timeout_due(&self, now_millis: u64) -> bool {
+        self.personal
+            .and_then(|personal| personal.deadline_millis())
+            .is_some_and(|deadline| now_millis >= deadline)
+    }
+
+    /// Expires the screen and its requests while retaining the unanswered lifecycle for cleanup.
+    pub(super) fn poll_personal_timeout(&mut self, now_millis: u64) -> bool {
+        if !self.personal_timeout_due(now_millis) {
+            return false;
+        }
+        let personal = self
+            .personal
+            .as_mut()
+            .expect("an expired personal window was observed");
+        let generation = personal.generation();
+        match personal {
+            PersonalWindow::Opening {
+                desired_open,
+                deadline_millis,
+                ..
+            } => {
+                *desired_open = false;
+                *deadline_millis = None;
+            }
+            PersonalWindow::Closing {
+                deadline_millis, ..
+            } => *deadline_millis = None,
+            PersonalWindow::Open { .. } => unreachable!("an open window has no deadline"),
+        }
+        self.pending_closes
+            .retain(|close| close.owner.personal_generation() != Some(generation));
+        self.abandon_requests(|pending| pending.personal_generation == Some(generation));
+        self.held_open = None;
+        self.drop_confirmed_cursor();
+        self.refold();
+        true
     }
 
     fn cancel_unsent_personal_prediction(&mut self, generation: u64) {

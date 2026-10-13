@@ -81,13 +81,13 @@ impl PlayerInventoryLedger {
                     super::PersonalWindow::Closing {
                         window_id,
                         window_type,
-                        deadline_millis,
+                        admitted,
                         ..
                     } => {
                         // Vanilla routes a response to the screen manager
                         // without inspecting its container id or type. Those
                         // payload fields are not acknowledgement correlation.
-                        if !close.server_initiated && deadline_millis.is_some() {
+                        if !close.server_initiated && *admitted {
                             Some(true)
                         } else if close.server_initiated
                             && close.container.window_id == Some(*window_id)
@@ -105,7 +105,7 @@ impl PlayerInventoryLedger {
                 let unsent_personal_close = matches!(
                     self.personal,
                     Some(super::PersonalWindow::Closing {
-                        deadline_millis: None,
+                        admitted: false,
                         ..
                     })
                 );
@@ -536,6 +536,7 @@ impl PlayerInventoryLedger {
                 generation,
                 window_id,
                 window_type: open.window_type,
+                admitted: false,
                 // The acknowledgement completed the Open wait. Start the
                 // distinct Close wait only after its packet is admitted.
                 deadline_millis: None,

@@ -607,11 +607,13 @@ impl PlayerInventoryLedger {
             if let Some(generation) = close.owner.personal_generation()
                 && let Some(PersonalWindow::Closing {
                     generation: current,
+                    admitted,
                     deadline_millis,
                     ..
                 }) = self.personal.as_mut()
                 && *current == generation
             {
+                *admitted = true;
                 *deadline_millis =
                     Some(now_millis.saturating_add(INVENTORY_REQUEST_TIMEOUT_MILLIS));
             }
@@ -698,44 +700,6 @@ impl PlayerInventoryLedger {
         self.personal_timeout_due(now_millis)
             || self.request_timeout_work_due(now_millis)
             || self.settled_close_index().is_some()
-    }
-
-    /// Tests the personal window's existing admitted deadline without mutating it.
-    fn personal_timeout_due(&self, now_millis: u64) -> bool {
-        match self.personal {
-            Some(
-                PersonalWindow::Opening {
-                    admitted: true,
-                    deadline_millis: Some(deadline),
-                    ..
-                }
-                | PersonalWindow::Closing {
-                    deadline_millis: Some(deadline),
-                    ..
-                },
-            ) => now_millis >= deadline,
-            _ => false,
-        }
-    }
-
-    fn poll_personal_timeout(&mut self, now_millis: u64) -> bool {
-        if !self.personal_timeout_due(now_millis) {
-            return false;
-        }
-        let personal = self
-            .personal
-            .expect("an expired personal window was observed");
-        let generation = personal.generation();
-        self.pending_closes
-            .retain(|close| close.owner.personal_generation() != Some(generation));
-        self.abandon_requests(|pending| pending.personal_generation == Some(generation));
-        self.personal = None;
-        // A late answer is no reason to refuse the player's next open; a window the server opens
-        // after this is closed as stray.
-        self.held_open = None;
-        self.drop_confirmed_cursor();
-        self.refold();
-        true
     }
 
     pub fn transport_closed(&mut self) {
