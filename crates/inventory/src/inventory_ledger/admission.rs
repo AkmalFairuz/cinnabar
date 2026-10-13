@@ -56,6 +56,8 @@ impl PlayerInventoryLedger {
                 {
                     self.queue.clear();
                     self.personal = None;
+                    self.expired_personal = None;
+                    self.held_open = None;
                     self.settling.clear();
                     self.confirmed.set(Cell::Cursor, None);
                     self.player_resync_required = false;
@@ -67,7 +69,8 @@ impl PlayerInventoryLedger {
             }
             InventoryEvent::Open(open) => self.apply_open(*open),
             InventoryEvent::Close(close) => {
-                let personal_close = self.personal.as_ref().and_then(|personal| match personal {
+                let lifecycle = self.personal_lifecycle();
+                let personal_close = lifecycle.and_then(|personal| match personal {
                     super::PersonalWindow::Open {
                         window_id,
                         window_type,
@@ -100,10 +103,19 @@ impl PlayerInventoryLedger {
                     }
                     _ => None,
                 });
+                if personal_close.is_some()
+                    && let Some(expired) = self.expired_personal.take()
+                {
+                    // Retire only this control, preserving storage and its queued close and inputs.
+                    self.pending_closes.retain(|pending| {
+                        pending.owner.personal_generation() != Some(expired.generation())
+                    });
+                    return;
+                }
                 // A stale response cannot consume the close before it has
                 // reached the transport, even when its payload happens to match.
                 let unsent_personal_close = matches!(
-                    self.personal,
+                    self.personal_lifecycle(),
                     Some(super::PersonalWindow::Closing {
                         admitted: false,
                         ..
@@ -474,6 +486,7 @@ impl PlayerInventoryLedger {
             return;
         };
         self.enchant_options = None;
+        self.supersede_expired_personal_close(window_id);
         self.remove_pending_close(window_id, open.window_type);
         let generation = self.next_open_generation;
         self.next_open_generation = self.next_open_generation.wrapping_add(1).max(1);
@@ -507,7 +520,7 @@ impl PlayerInventoryLedger {
             admitted: true,
             desired_open,
             ..
-        }) = self.personal
+        }) = self.personal_lifecycle().copied()
         else {
             self.queue_close(window_id, open.window_type, PendingCloseOwner::Cleanup);
             self.note_unrouted_container();
@@ -516,23 +529,24 @@ impl PlayerInventoryLedger {
         if !valid_raw_window_id(window_id) {
             self.queue_close(window_id, open.window_type, PendingCloseOwner::Cleanup);
             self.personal = None;
+            self.expired_personal = None;
             self.personal_lifecycle_failed = true;
             self.note_unrouted_container();
             return;
         }
-        if desired_open {
-            self.personal = Some(super::PersonalWindow::Open {
+        let personal = if desired_open {
+            super::PersonalWindow::Open {
                 generation,
                 window_id,
                 window_type: open.window_type,
-            });
+            }
         } else {
             self.queue_close(
                 window_id,
                 open.window_type,
                 PendingCloseOwner::Personal(generation),
             );
-            self.personal = Some(super::PersonalWindow::Closing {
+            super::PersonalWindow::Closing {
                 generation,
                 window_id,
                 window_type: open.window_type,
@@ -540,7 +554,15 @@ impl PlayerInventoryLedger {
                 // The acknowledgement completed the Open wait. Start the
                 // distinct Close wait only after its packet is admitted.
                 deadline_millis: None,
-            });
+            }
+        };
+        if self.expired_personal.is_some() {
+            self.expired_personal = Some(personal);
+            if let Some(storage) = self.storage.as_ref() {
+                self.supersede_expired_personal_close(storage.window_id);
+            }
+        } else {
+            self.personal = Some(personal);
         }
     }
 

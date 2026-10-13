@@ -18,6 +18,9 @@ mod mining_tests;
 #[path = "settling_tests.rs"]
 mod settling_tests;
 
+#[path = "timeout_tests.rs"]
+mod timeout_tests;
+
 fn stack(stack_network_id: i32, count: u16) -> NetworkItemStack {
     NetworkItemStack {
         network_id: 6,

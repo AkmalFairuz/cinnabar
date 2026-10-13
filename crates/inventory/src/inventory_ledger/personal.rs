@@ -47,6 +47,16 @@ impl PersonalWindow {
 }
 
 impl PlayerInventoryLedger {
+    /// Finds the active or expired personal lifecycle whose replies still need correlation.
+    pub(super) fn personal_lifecycle(&self) -> Option<&PersonalWindow> {
+        self.personal.as_ref().or(self.expired_personal.as_ref())
+    }
+
+    /// Updates control admission without giving an expired lifecycle ownership of cells.
+    pub(super) fn personal_lifecycle_mut(&mut self) -> Option<&mut PersonalWindow> {
+        self.personal.as_mut().or(self.expired_personal.as_mut())
+    }
+
     #[must_use]
     pub const fn personal_inventory_desired_open(&self) -> bool {
         self.held_open.is_some()
@@ -89,6 +99,7 @@ impl PlayerInventoryLedger {
         }
         // Replies carry no generation, so finish the previous lifecycle before retrying.
         if !self.pending_closes.is_empty()
+            || self.expired_personal.is_some()
             || matches!(
                 self.personal,
                 Some(
@@ -209,6 +220,8 @@ impl PlayerInventoryLedger {
         if let Some(target_runtime_id) = self.held_open
             && self.pending_closes.is_empty()
             && self.personal.is_none()
+            && self.expired_personal.is_none()
+            && self.storage.is_none()
         {
             self.held_open = None;
             self.request_personal_open(target_runtime_id);
@@ -227,12 +240,12 @@ impl PlayerInventoryLedger {
         if !self.personal_timeout_due(now_millis) {
             return false;
         }
-        let personal = self
+        let mut personal = self
             .personal
-            .as_mut()
+            .take()
             .expect("an expired personal window was observed");
         let generation = personal.generation();
-        match personal {
+        match &mut personal {
             PersonalWindow::Opening {
                 desired_open,
                 deadline_millis,
@@ -246,6 +259,7 @@ impl PlayerInventoryLedger {
             } => *deadline_millis = None,
             PersonalWindow::Open { .. } => unreachable!("an open window has no deadline"),
         }
+        self.expired_personal = Some(personal);
         self.pending_closes
             .retain(|close| close.owner.personal_generation() != Some(generation));
         self.abandon_requests(|pending| pending.personal_generation == Some(generation));
@@ -253,6 +267,21 @@ impl PlayerInventoryLedger {
         self.drop_confirmed_cursor();
         self.refold();
         true
+    }
+
+    /// Cancels unsent cleanup when storage reuses its ID, because close packets carry only an ID.
+    pub(super) fn supersede_expired_personal_close(&mut self, storage_window_id: i32) {
+        if let Some(PersonalWindow::Closing {
+            window_id,
+            window_type,
+            admitted: false,
+            ..
+        }) = self.expired_personal
+            && window_id == storage_window_id
+        {
+            self.remove_pending_close(window_id, window_type);
+            self.expired_personal = None;
+        }
     }
 
     fn cancel_unsent_personal_prediction(&mut self, generation: u64) {

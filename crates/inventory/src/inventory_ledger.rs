@@ -224,6 +224,8 @@ pub struct PlayerInventoryLedger {
     session_generation: u64,
     next_open_generation: u64,
     personal: Option<PersonalWindow>,
+    /// Unanswered personal controls retained for correlation without owning inventory cells.
+    expired_personal: Option<PersonalWindow>,
     personal_lifecycle_failed: bool,
     /// An open press made while a close is unsent or unacknowledged; opens once it settles.
     held_open: Option<u64>,
@@ -270,6 +272,7 @@ impl Default for PlayerInventoryLedger {
             session_generation: 0,
             next_open_generation: 1,
             personal: None,
+            expired_personal: None,
             personal_lifecycle_failed: false,
             held_open: None,
             settling: VecDeque::new(),
@@ -610,7 +613,7 @@ impl PlayerInventoryLedger {
                     admitted,
                     deadline_millis,
                     ..
-                }) = self.personal.as_mut()
+                }) = self.personal_lifecycle_mut()
                 && *current == generation
             {
                 *admitted = true;
@@ -705,6 +708,7 @@ impl PlayerInventoryLedger {
     pub fn transport_closed(&mut self) {
         self.pending_closes.clear();
         self.personal = None;
+        self.expired_personal = None;
         self.held_open = None;
         self.settling.clear();
         self.abandon_requests(|_| true);
@@ -898,7 +902,7 @@ impl PlayerInventoryLedger {
             return;
         }
         if self.pending_closes.len() >= MAX_PENDING_CLOSES {
-            let current_personal = self.personal.as_ref().map(PersonalWindow::generation);
+            let current_personal = self.personal_lifecycle().map(PersonalWindow::generation);
             // Old cleanup and storage closes describe superseded server
             // windows. Evict the oldest such control, but preserve the close
             // that owns the still-current personal generation.
