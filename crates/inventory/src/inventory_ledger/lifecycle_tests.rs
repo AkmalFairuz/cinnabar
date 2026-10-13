@@ -285,17 +285,13 @@ fn missing_open_and_close_acknowledgements_expire_without_reopening_late() {
     assert!(opening.mark_transport_enqueued(10));
     assert!(opening.poll_timeout(10 + INVENTORY_REQUEST_TIMEOUT_MILLIS));
     assert!(!opening.personal_inventory_desired_open());
-    assert!(
-        !opening.request_personal_open(42),
-        "an uncorrelated late acknowledgement makes this session unavailable"
-    );
     opening.apply(&InventoryEvent::Open(personal_open(2)));
     assert!(!opening.personal_inventory_desired_open());
     assert_eq!(opening.pending_closes.front().unwrap().window_id, 2);
-    assert!(!opening.request_personal_open(42));
-    opening.begin_session(2);
-    opening.apply(&InventoryEvent::Authority(InventoryAuthority::Server));
-    assert!(opening.request_personal_open(42));
+    assert!(
+        opening.request_personal_open(42),
+        "a late acknowledgement leaves the next open available"
+    );
 
     let mut closing = ledger_with_slot_zero();
     acknowledge_personal_open(&mut closing, 2);
@@ -304,7 +300,7 @@ fn missing_open_and_close_acknowledgements_expire_without_reopening_late() {
     assert!(closing.poll_timeout(20 + INVENTORY_REQUEST_TIMEOUT_MILLIS));
     assert!(closing.personal.is_none());
     assert!(!closing.personal_inventory_desired_open());
-    assert!(!closing.request_personal_open(42));
+    assert!(closing.request_personal_open(42));
 }
 
 #[test]

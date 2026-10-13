@@ -730,7 +730,8 @@ impl PlayerInventoryLedger {
             .retain(|close| close.owner.personal_generation() != Some(generation));
         self.abandon_requests(|pending| pending.personal_generation == Some(generation));
         self.personal = None;
-        self.personal_lifecycle_failed = true;
+        // A late answer is no reason to refuse the player's next open; a window the server opens
+        // after this is closed as stray.
         self.held_open = None;
         self.drop_confirmed_cursor();
         self.refold();
