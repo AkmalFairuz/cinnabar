@@ -27,7 +27,7 @@ mod client_packets;
 mod legacy;
 pub use legacy::{
     NormalInventoryChange, NormalInventorySource, inventory_drop_transaction_packet,
-    is_legacy_request_id, normal_inventory_transaction_packet,
+    is_legacy_request_id, next_legacy_request_id, normal_inventory_transaction_packet,
 };
 mod raw_scan;
 pub mod recipes;

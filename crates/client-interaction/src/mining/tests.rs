@@ -48,7 +48,11 @@ fn sent_world_drop_remainders_remain_available_to_gameplay_selections() {
         },
         storage_item: None,
     }));
-    let request = ledger.begin_world_drop(2, Some(1)).unwrap();
+    ledger.begin_world_drop(2, Some(1)).unwrap();
+    let (packet, _) = ledger.pending_batch().unwrap().unwrap();
+    let legacy_id = protocol::test_support::transactions::observe_transaction(&packet)
+        .unwrap()
+        .legacy_request_id;
     assert!(ledger.mark_transport_enqueued(0));
 
     for selection in [
@@ -59,6 +63,6 @@ fn sent_world_drop_remainders_remain_available_to_gameplay_selections() {
         assert_eq!(selection.slot, 2);
         assert_eq!(selection.item.network_id(), 7);
         assert_eq!(selection.item.count(), 2);
-        assert_eq!(selection.item.stack_network_id(), request + 1);
+        assert_eq!(selection.item.stack_network_id(), legacy_id);
     }
 }

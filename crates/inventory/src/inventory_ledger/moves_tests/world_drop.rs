@@ -6,6 +6,8 @@ use protocol::{
 
 use super::*;
 
+mod lifecycle;
+
 /// One addressed count and stack-id correction, with its requested cell unchanged.
 fn corrected_container(
     slot_type: u8,
@@ -70,10 +72,11 @@ fn legacy_drop_responses_reconcile_positive_and_legacy_stack_ids_once() {
     for corrected_id in [91, -2] {
         let mut ledger = known_ledger(&[(2, digested(stack(6, 100, 5)))]);
         let request = ledger.begin_world_drop(2, Some(1)).unwrap();
+        let request_legacy = drop_legacy_id(&ledger, request);
         assert!(ledger.mark_transport_enqueued(0));
         assert_eq!(ledger.pending_request_count(), 0);
         ledger.apply(&response(
-            request + 1,
+            request_legacy,
             StackResponseStatus::Accepted,
             Some((3, corrected_id)),
         ));
@@ -85,7 +88,11 @@ fn legacy_drop_responses_reconcile_positive_and_legacy_stack_ids_once() {
         );
         assert!(!ledger.resync_required());
 
-        ledger.apply(&response(request + 1, StackResponseStatus::Rejected, None));
+        ledger.apply(&response(
+            request_legacy,
+            StackResponseStatus::Rejected,
+            None,
+        ));
         assert_eq!(ledger.displayed_stack(2).unwrap().count, 3);
     }
 }
@@ -100,16 +107,21 @@ fn rejected_legacy_drop_restores_the_original_stack_and_overlay_once() {
     };
     ledger.set_confirmed_overlay(Cell::Inventory(2), overlay.clone());
     let request = ledger.begin_world_drop(2, Some(1)).unwrap();
+    let request_legacy = drop_legacy_id(&ledger, request);
     assert_eq!(ledger.take_world_drops(), 1);
     assert!(ledger.mark_transport_enqueued(0));
-    ledger.apply(&response(request + 1, StackResponseStatus::Rejected, None));
+    ledger.apply(&response(
+        request_legacy,
+        StackResponseStatus::Rejected,
+        None,
+    ));
     assert_eq!(ledger.displayed_stack(2), Some(&original));
     assert_eq!(ledger.slot_overlay(2), Some(&overlay));
     assert_eq!(ledger.pending_request_count(), 0);
     assert_eq!(ledger.take_world_drops(), 0);
 
     ledger.apply(&response(
-        request + 1,
+        request_legacy,
         StackResponseStatus::Accepted,
         Some((1, 91)),
     ));
@@ -120,13 +132,14 @@ fn rejected_legacy_drop_restores_the_original_stack_and_overlay_once() {
 fn unanswered_legacy_drops_do_not_delay_play_or_require_a_refresh() {
     let mut ledger = known_ledger(&[(2, digested(stack(6, 100, 5)))]);
     let request = ledger.begin_world_drop(2, Some(1)).unwrap();
+    let request_legacy = drop_legacy_id(&ledger, request);
     assert!(ledger.mark_transport_enqueued(0));
     ledger.poll_timeout(INVENTORY_REQUEST_TIMEOUT_MILLIS * 2);
     assert_eq!(ledger.pending_state(), None);
     assert!(!ledger.resync_required());
     assert!(ledger.pending_batch().unwrap().is_none());
     ledger.apply(&response(
-        request + 1,
+        request_legacy,
         StackResponseStatus::Accepted,
         Some((3, 91)),
     ));
@@ -138,7 +151,9 @@ fn queued_drops_serialize_the_established_legacy_source_and_world_descriptor() {
     for second_amount in [1, 2] {
         let mut ledger = known_ledger(&[(2, digested(stack(6, 100, 3)))]);
         let first = ledger.begin_world_drop(2, Some(1)).unwrap();
+        let first_legacy = drop_legacy_id(&ledger, first);
         let second = ledger.begin_world_drop(2, Some(second_amount)).unwrap();
+        let second_legacy = drop_legacy_id(&ledger, second);
         assert!(ledger.mark_transport_enqueued(0));
         let (packet, count) = ledger.pending_batch().unwrap().unwrap();
         assert_eq!(count, 1);
@@ -146,17 +161,17 @@ fn queued_drops_serialize_the_established_legacy_source_and_world_descriptor() {
         assert_eq!(transaction.actions.len(), 2);
         assert_eq!(
             transaction.actions[0].from_item.stack_network_id,
-            Some(first + 1)
+            Some(first_legacy)
         );
         assert_eq!(transaction.actions[0].from_item.count, 2);
         assert_eq!(
             transaction.actions[1].to_item.stack_network_id,
-            Some(first + 1)
+            Some(first_legacy)
         );
         assert_eq!(transaction.actions[1].to_item.count, second_amount);
         assert_eq!(
             transaction.legacy_request_id,
-            if second_amount == 1 { second + 1 } else { 0 }
+            if second_amount == 1 { second_legacy } else { 0 }
         );
         assert!(ledger.mark_transport_enqueued(0));
         assert_eq!(
@@ -171,6 +186,7 @@ fn legacy_remainders_merge_on_either_side_of_a_cursor_gesture() {
     for take in [false, true] {
         let mut ledger = known_ledger(&[(2, digested(stack(6, 100, 5)))]);
         let request = ledger.begin_world_drop(2, Some(1)).unwrap();
+        let request_legacy = drop_legacy_id(&ledger, request);
         assert!(ledger.mark_transport_enqueued(0));
         ledger.apply(&InventoryEvent::Content(InventoryContentEvent {
             container: ContainerIdentity {
@@ -187,14 +203,14 @@ fn legacy_remainders_merge_on_either_side_of_a_cursor_gesture() {
             assert_eq!(ledger.displayed_stack(2).unwrap().count, 3);
             assert_eq!(ledger.cursor_stack().unwrap().count, 3);
             assert!(
-                matches!(ledger.newest_action(), Some(StackRequestAction::Take { source, .. }) if source.stack_network_id == request + 1)
+                matches!(ledger.newest_action(), Some(StackRequestAction::Take { source, .. }) if source.stack_network_id == request_legacy)
             );
         } else {
             ledger.begin_place_count(2, 1).unwrap();
             assert_eq!(ledger.displayed_stack(2).unwrap().count, 5);
             assert_eq!(ledger.cursor_stack().unwrap().count, 1);
             assert!(
-                matches!(ledger.newest_action(), Some(StackRequestAction::Place { destination, .. }) if destination.stack_network_id == request + 1)
+                matches!(ledger.newest_action(), Some(StackRequestAction::Place { destination, .. }) if destination.stack_network_id == request_legacy)
             );
         }
         assert!(ledger.pending_batch().unwrap().is_some());
@@ -205,6 +221,7 @@ fn legacy_remainders_merge_on_either_side_of_a_cursor_gesture() {
 fn two_stacks_with_the_same_settled_legacy_id_cannot_merge() {
     let mut ledger = known_ledger(&[(2, digested(stack(6, 100, 5)))]);
     let request = ledger.begin_world_drop(2, Some(1)).unwrap();
+    let request_legacy = drop_legacy_id(&ledger, request);
     assert!(ledger.mark_transport_enqueued(0));
     ledger.apply(&InventoryEvent::Content(InventoryContentEvent {
         container: ContainerIdentity {
@@ -212,7 +229,7 @@ fn two_stacks_with_the_same_settled_legacy_id_cannot_merge() {
             slot_type: Some(CONTAINER_NAME_CURSOR),
             dynamic_id: None,
         },
-        slots: Arc::from([digested(stack(6, request + 1, 2))]),
+        slots: Arc::from([digested(stack(6, request_legacy, 2))]),
         storage_item: NetworkItemStack::empty(),
     }));
     open_personal(&mut ledger);
@@ -232,6 +249,7 @@ fn quick_moves_merge_legacy_remainders_as_sources_and_destinations() {
             (20, digested(stack(6, 101, 2))),
         ]);
         let request = ledger.begin_world_drop(2, Some(1)).unwrap();
+        let request_legacy = drop_legacy_id(&ledger, request);
         assert!(ledger.mark_transport_enqueued(0));
         open_personal(&mut ledger);
         ledger
@@ -254,7 +272,7 @@ fn quick_moves_merge_legacy_remainders_as_sources_and_destinations() {
         } else {
             into.stack_network_id
         };
-        assert_eq!(legacy_id, request + 1);
+        assert_eq!(legacy_id, request_legacy);
     }
 }
 
@@ -262,6 +280,7 @@ fn quick_moves_merge_legacy_remainders_as_sources_and_destinations() {
 fn split_responses_accept_distinct_legacy_and_server_stack_ids() {
     let mut ledger = known_ledger(&[(2, digested(stack(6, 100, 5)))]);
     let drop = ledger.begin_world_drop(2, Some(1)).unwrap();
+    let drop_legacy = drop_legacy_id(&ledger, drop);
     assert!(ledger.mark_transport_enqueued(0));
     open_personal(&mut ledger);
     let split = ledger.begin_take_count(2, 2).unwrap();
@@ -271,28 +290,33 @@ fn split_responses_accept_distinct_legacy_and_server_stack_ids() {
             status: StackResponseStatus::Accepted,
             request_id: split,
             containers: Arc::from([
-                corrected_container(CONTAINER_NAME_COMBINED_HOTBAR_AND_INVENTORY, 2, 2, drop + 1),
+                corrected_container(
+                    CONTAINER_NAME_COMBINED_HOTBAR_AND_INVENTORY,
+                    2,
+                    2,
+                    drop_legacy,
+                ),
                 corrected_container(CONTAINER_NAME_CURSOR, 0, 2, 91),
             ]),
         }]),
     }));
     assert_eq!(
         ledger.displayed_stack(2).unwrap().stack_network_id,
-        drop + 1
+        drop_legacy
     );
     assert_eq!(ledger.cursor_stack().unwrap().stack_network_id, 91);
     assert_eq!(ledger.pending_state(), None);
     assert!(!ledger.resync_required());
     ledger.apply(&response(
-        drop + 1,
+        drop_legacy,
         StackResponseStatus::Accepted,
         Some((4, 92)),
     ));
-    ledger.apply(&response(drop + 1, StackResponseStatus::Rejected, None));
+    ledger.apply(&response(drop_legacy, StackResponseStatus::Rejected, None));
     assert_eq!(ledger.displayed_stack(2).unwrap().count, 2);
     assert_eq!(
         ledger.displayed_stack(2).unwrap().stack_network_id,
-        drop + 1
+        drop_legacy
     );
 }
 
@@ -302,16 +326,22 @@ fn a_later_rejected_drop_reveals_the_corrected_earlier_drop() {
         let original = digested(stack(6, 100, 5));
         let mut ledger = known_ledger(&[(2, original.clone())]);
         let first = ledger.begin_world_drop(2, Some(1)).unwrap();
+        let first_legacy = drop_legacy_id(&ledger, first);
         let second = ledger.begin_world_drop(2, Some(1)).unwrap();
+        let second_legacy = drop_legacy_id(&ledger, second);
         assert!(ledger.mark_transport_enqueued(0));
         assert!(ledger.mark_transport_enqueued(0));
         ledger.apply(&response(
-            first + 1,
+            first_legacy,
             status,
             (status == StackResponseStatus::Accepted).then_some((2, 91)),
         ));
         assert_eq!(ledger.displayed_stack(2).unwrap().count, 3);
-        ledger.apply(&response(second + 1, StackResponseStatus::Rejected, None));
+        ledger.apply(&response(
+            second_legacy,
+            StackResponseStatus::Rejected,
+            None,
+        ));
         if status == StackResponseStatus::Accepted {
             let held = ledger.displayed_stack(2).unwrap();
             assert_eq!((held.count, held.stack_network_id), (2, 91));
@@ -330,28 +360,41 @@ fn out_of_order_rejections_restore_the_original_stack() {
     let original = digested(stack(6, 100, 5));
     let mut ledger = known_ledger(&[(2, original.clone())]);
     let first = ledger.begin_world_drop(2, Some(1)).unwrap();
+    let first_legacy = drop_legacy_id(&ledger, first);
     let second = ledger.begin_world_drop(2, Some(1)).unwrap();
+    let second_legacy = drop_legacy_id(&ledger, second);
     assert!(ledger.mark_transport_enqueued(0));
     assert!(ledger.mark_transport_enqueued(0));
-    ledger.apply(&response(second + 1, StackResponseStatus::Rejected, None));
+    ledger.apply(&response(
+        second_legacy,
+        StackResponseStatus::Rejected,
+        None,
+    ));
     assert_eq!(
         ledger.displayed_stack(2).unwrap().stack_network_id,
-        first + 1
+        first_legacy
     );
-    ledger.apply(&response(first + 1, StackResponseStatus::Rejected, None));
+    ledger.apply(&response(first_legacy, StackResponseStatus::Rejected, None));
     assert_eq!(ledger.displayed_stack(2), Some(&original));
 }
 
 #[test]
-fn late_drop_responses_do_not_restore_an_item_consumed_by_gameplay() {
+fn late_drop_responses_do_not_restore_an_authoritatively_emptied_slot() {
     for status in [StackResponseStatus::Accepted, StackResponseStatus::Rejected] {
         let mut ledger = known_ledger(&[(2, digested(stack(6, 100, 2)))]);
         let request = ledger.begin_world_drop(2, Some(1)).unwrap();
+        let request_legacy = drop_legacy_id(&ledger, request);
         assert!(ledger.mark_transport_enqueued(0));
-        let revision = ledger.authoritative_slot_revision(2).unwrap();
-        assert!(ledger.settle_use_emptied_slot(2, revision));
+        ledger.apply(&InventoryEvent::Slot(InventorySlotEvent {
+            identity: SlotIdentity {
+                container: ContainerIdentity::window(0),
+                slot: 2,
+            },
+            stack: NetworkItemStack::empty(),
+            storage_item: None,
+        }));
         ledger.apply(&response(
-            request + 1,
+            request_legacy,
             status,
             (status == StackResponseStatus::Accepted).then_some((1, 91)),
         ));
@@ -365,14 +408,22 @@ fn later_sparse_predictions_still_cover_a_legacy_response_to_the_backing_slot() 
         let original = digested(stack(6, 100, 5));
         let mut ledger = known_ledger(&[(2, original.clone())]);
         let first = ledger.begin_world_drop(2, Some(1)).unwrap();
+        let first_legacy = drop_legacy_id(&ledger, first);
         let second = ledger.begin_world_drop(2, Some(1)).unwrap();
         assert!(ledger.mark_transport_enqueued(0));
         ledger.apply(&response(
-            first + 1,
+            first_legacy,
             status,
             (status == StackResponseStatus::Accepted).then_some((2, 91)),
         ));
-        assert_eq!(ledger.displayed_stack(2).unwrap().count, 3);
+        assert_eq!(
+            ledger.displayed_stack(2).unwrap().count,
+            if status == StackResponseStatus::Accepted {
+                1
+            } else {
+                4
+            }
+        );
         assert_eq!(ledger.displayed_stack(2).unwrap().stack_network_id, second);
         assert_eq!(
             ledger.confirmed_stack(Cell::Inventory(2)).unwrap().count,
@@ -392,6 +443,7 @@ fn late_legacy_responses_do_not_overwrite_a_server_restatement_or_a_newer_drop()
             let original = digested(stack(6, 100, 5));
             let mut ledger = known_ledger(&[(2, original.clone())]);
             let first = ledger.begin_world_drop(2, Some(1)).unwrap();
+            let first_legacy = drop_legacy_id(&ledger, first);
             assert!(ledger.mark_transport_enqueued(0));
             if refreshed {
                 ledger.apply(&InventoryEvent::Slot(InventorySlotEvent {
@@ -408,7 +460,7 @@ fn late_legacy_responses_do_not_overwrite_a_server_restatement_or_a_newer_drop()
             }
             let current = ledger.displayed_stack(2).cloned();
             ledger.apply(&response(
-                first + 1,
+                first_legacy,
                 status,
                 (status == StackResponseStatus::Accepted).then_some((1, 91)),
             ));

@@ -93,9 +93,8 @@ fn encode_request(
         let prior_request = slot.stack_network_id < -1
             && slot.stack_network_id & 1 != 0
             && slot.stack_network_id > request_id;
-        // A stack an earlier drop transaction left behind keeps that transaction's legacy id.
-        let prior_legacy = super::is_legacy_request_id(slot.stack_network_id)
-            && slot.stack_network_id > request_id;
+        // Legacy transactions and item stack requests have independent id sequences.
+        let prior_legacy = super::is_legacy_request_id(slot.stack_network_id);
         if slot.stack_network_id < -1 && !created_output && !prior_request && !prior_legacy {
             return Err(InventoryPacketError::InvalidRequestStackNetworkId(
                 slot.stack_network_id,
@@ -232,5 +231,6 @@ mod tests {
         }
         // A stack an earlier drop transaction left behind is named by its legacy id.
         assert!(drop_from(-4).is_ok());
+        assert!(drop_from(-8).is_ok());
     }
 }

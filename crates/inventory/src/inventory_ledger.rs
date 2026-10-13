@@ -549,12 +549,12 @@ impl PlayerInventoryLedger {
             .iter()
             .filter(|pending| pending.state == InventoryPendingState::AwaitingTransport)
             .peekable();
-        if let Some(drop) = ready.next_if(|pending| pending.world_drop) {
+        if let Some(drop) = ready.next_if(|pending| pending.world_drop.is_some()) {
             return self.world_drop_packet(drop).map(|packet| Some((packet, 1)));
         }
         // A later drop leaves in its own packet, after the requests queued before it.
         let requests: Vec<_> = ready
-            .take_while(|pending| !pending.world_drop)
+            .take_while(|pending| pending.world_drop.is_none())
             .map(|pending| {
                 (
                     pending.request_id,
@@ -633,7 +633,7 @@ impl PlayerInventoryLedger {
         else {
             return false;
         };
-        if self.queue[index].world_drop {
+        if self.queue[index].world_drop.is_some() {
             return self.commit_world_drop(index);
         }
         let pending = &mut self.queue[index];

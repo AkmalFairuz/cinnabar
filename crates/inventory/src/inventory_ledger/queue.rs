@@ -50,7 +50,14 @@ pub(super) struct PendingRequest {
     /// A mine-block request riding PlayerAuthInput rather than its own packet.
     pub(super) mining: Option<MiningPrediction>,
     /// A drop key press with no window open, which leaves as a normal transaction.
-    pub(super) world_drop: bool,
+    pub(super) world_drop: Option<WorldDrop>,
+}
+
+/// A reserved transaction identity and the admitted gameplay consumption after its drop.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct WorldDrop {
+    pub(super) legacy_request_id: i32,
+    pub(super) consumed_after: u16,
 }
 
 /// The native sparse cell and its historic request snapshot. A later local
@@ -347,12 +354,15 @@ impl PlayerInventoryLedger {
             self.note_unrouted_container();
             return;
         }
-        if !request.world_drop {
+        if request.world_drop.is_none() {
+            self.retire_legacy_write(cell);
             self.committed_world_drops
                 .retain(|drop| !drop.touches(cell));
         }
         self.note_authoritative_write(cell);
-        if correction.count == 0 {
+        let count = u16::from(correction.count)
+            .saturating_sub(request.world_drop.map_or(0, |drop| drop.consumed_after));
+        if count == 0 {
             self.confirmed.set(cell, None);
             return;
         }
@@ -368,8 +378,12 @@ impl PlayerInventoryLedger {
         }
         match self.confirmed.get_mut(cell) {
             Some(held) => {
-                held.stack.count = u16::from(correction.count);
-                held.stack.stack_network_id = correction.item_stack_id;
+                held.stack.count = count;
+                held.stack.stack_network_id = request
+                    .world_drop
+                    .filter(|drop| drop.consumed_after != 0)
+                    .and_then(|_| prediction.and_then(|prediction| prediction.held.as_ref()))
+                    .map_or(correction.item_stack_id, |held| held.stack.stack_network_id);
                 merge_response_overlay(&mut held.overlay, correction);
             }
             // Screen cells restate through slot updates that follow the response.
@@ -639,7 +653,7 @@ impl PlayerInventoryLedger {
                 furnace_route: None,
                 predicted: Vec::new(),
                 mining: Some(MiningPrediction { slot, damage }),
-                world_drop: false,
+                world_drop: None,
             },
         );
         Some(request_id)

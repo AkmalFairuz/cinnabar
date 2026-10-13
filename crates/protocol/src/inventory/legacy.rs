@@ -8,8 +8,26 @@ use bedrock_protocol_1_26_51::types::{
     ItemStackLegacyRequestID, LegacySetSlot,
 };
 use bedrock_protocol_1_26_51::wire;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use super::{InventoryPacketError, MAX_CONTAINER_SLOTS, VerifiedNetworkItemStack};
+
+/// One process-wide namespace for drops, placements and air-use transactions.
+static LEGACY_REQUEST_IDS: AtomicI32 = AtomicI32::new(FIRST_LEGACY_REQUEST_ID);
+const FIRST_LEGACY_REQUEST_ID: i32 = -4;
+
+/// Reserves a unique negative even transaction id, or refuses when the counter cannot advance.
+/// Unsent transactions consume their reservation too, so retries never reuse another owner's id.
+pub fn next_legacy_request_id() -> Option<i32> {
+    allocate_legacy_request_id(&LEGACY_REQUEST_IDS)
+}
+
+/// Advances a legacy counter without wrapping into a previously allocated id.
+fn allocate_legacy_request_id(counter: &AtomicI32) -> Option<i32> {
+    counter
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_sub(2))
+        .ok()
+}
 
 /// A normal transaction's inventory write or dropped-item balancing leg.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -103,4 +121,27 @@ fn normal_transaction(
         },
         ..Default::default()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_ids_are_even_and_never_reused_at_exhaustion() {
+        let counter = AtomicI32::new(FIRST_LEGACY_REQUEST_ID);
+        assert!(is_legacy_request_id(FIRST_LEGACY_REQUEST_ID));
+        assert_eq!(
+            allocate_legacy_request_id(&counter),
+            Some(FIRST_LEGACY_REQUEST_ID)
+        );
+        assert_eq!(
+            allocate_legacy_request_id(&counter),
+            Some(FIRST_LEGACY_REQUEST_ID - 2)
+        );
+        counter.store(i32::MIN + 2, Ordering::Relaxed);
+        assert_eq!(allocate_legacy_request_id(&counter), Some(i32::MIN + 2));
+        assert_eq!(allocate_legacy_request_id(&counter), None);
+        assert_eq!(allocate_legacy_request_id(&counter), None);
+    }
 }

@@ -15,6 +15,18 @@ mod storage_tests;
 
 mod world_drop;
 
+/// Reads the reserved wire identity of a drop still awaiting transport.
+fn drop_legacy_id(ledger: &PlayerInventoryLedger, request_id: i32) -> i32 {
+    ledger
+        .queue
+        .iter()
+        .find(|request| request.request_id == request_id)
+        .expect("queued drop")
+        .world_drop
+        .expect("world drop identity")
+        .legacy_request_id
+}
+
 fn stack(network_id: i32, stack_network_id: i32, count: u16) -> NetworkItemStack {
     NetworkItemStack {
         network_id,
@@ -258,7 +270,7 @@ fn world_drop_leaves_as_the_native_drop_transaction() {
     let held = digested(stack(8, 100, 3));
     let mut ledger = known_ledger(&[(2, held.clone())]);
     let request = ledger.begin_world_drop(2, Some(1)).unwrap();
-    let legacy_id = request + 1;
+    let legacy_id = drop_legacy_id(&ledger, request);
     let (packet, entries) = ledger.pending_batch().unwrap().unwrap();
     assert_eq!(entries, 1);
     let verify = |stack: NetworkItemStack| {
@@ -308,6 +320,7 @@ fn world_drop_leaves_as_the_native_drop_transaction() {
 fn requests_after_a_world_drop_name_the_remainder_by_its_legacy_id() {
     let mut ledger = known_ledger(&[(2, digested(stack(8, 100, 3)))]);
     let request = ledger.begin_world_drop(2, Some(1)).unwrap();
+    let legacy_id = drop_legacy_id(&ledger, request);
     assert!(ledger.mark_transport_enqueued(10));
     assert!(ledger.request_personal_open(42));
     assert!(ledger.mark_transport_enqueued(10));
@@ -323,7 +336,7 @@ fn requests_after_a_world_drop_name_the_remainder_by_its_legacy_id() {
     let Some(StackRequestAction::Drop { source, .. }) = ledger.newest_action() else {
         panic!("a screen drop");
     };
-    assert_eq!(source.stack_network_id, request + 1);
+    assert_eq!(source.stack_network_id, legacy_id);
     assert!(ledger.pending_batch().unwrap().is_some());
 }
 

@@ -13,15 +13,20 @@ use super::{
 };
 
 impl PlayerInventoryLedger {
+    /// Cancels unsent transactions whose exact source was authoritatively rewritten.
     pub(super) fn retire_legacy_write(&mut self, cell: Cell) {
-        if self.authority == Some(protocol::InventoryAuthority::Client)
-            && self.confirmed.contains(cell)
+        let client_authority = self.authority == Some(protocol::InventoryAuthority::Client);
+        if self.confirmed.contains(cell)
             && self.queue.iter().any(|request| {
-                request.state == InventoryPendingState::AwaitingTransport && request.touches(cell)
+                request.state == InventoryPendingState::AwaitingTransport
+                    && request.touches(cell)
+                    && (client_authority || request.world_drop.is_some())
             })
         {
             self.abandon_requests(|request| {
-                request.state == InventoryPendingState::AwaitingTransport && request.touches(cell)
+                request.state == InventoryPendingState::AwaitingTransport
+                    && request.touches(cell)
+                    && (client_authority || request.world_drop.is_some())
             });
             let mut owned = Vec::new();
             for prediction in self
@@ -197,11 +202,11 @@ impl PlayerInventoryLedger {
 
     /// Reconciles one optional drop response by its emitted even id, once, without delaying play.
     pub(super) fn apply_world_drop_response(&mut self, response: &StackResponse) -> bool {
-        let Some(index) = self
-            .committed_world_drops
-            .iter()
-            .position(|request| request.request_id + 1 == response.request_id)
-        else {
+        let Some(index) = self.committed_world_drops.iter().position(|request| {
+            request
+                .world_drop
+                .is_some_and(|drop| drop.legacy_request_id == response.request_id)
+        }) else {
             return false;
         };
         let mut request = self
@@ -211,7 +216,6 @@ impl PlayerInventoryLedger {
         if !self.request_is_current(&request) {
             return true;
         }
-        let names_drop = |held: &Held| held.stack.stack_network_id == response.request_id;
         let backing: Vec<_> = request
             .predicted
             .iter()
@@ -222,14 +226,23 @@ impl PlayerInventoryLedger {
                 )
             })
             .collect();
-        let owns_backing = backing
-            .iter()
-            .any(|(_, held)| held.as_ref().is_some_and(names_drop));
-        let owns_history = self
-            .committed_world_drops
-            .iter()
-            .flat_map(|later| &later.predicted)
-            .any(|prediction| prediction.before.as_ref().is_some_and(names_drop));
+        let owns_backing = request.predicted.iter().any(|prediction| {
+            same_stack_name(
+                self.confirmed.get(prediction.cell),
+                prediction.held.as_ref(),
+            )
+        });
+        let owns_history = request.predicted.iter().any(|source| {
+            self.committed_world_drops
+                .iter()
+                .chain(self.queue.iter())
+                .filter(|later| later.world_drop.is_some())
+                .flat_map(|later| &later.predicted)
+                .any(|prediction| {
+                    prediction.cell == source.cell
+                        && same_stack_name(prediction.before.as_ref(), source.held.as_ref())
+                })
+        });
         if !owns_backing && !owns_history {
             return true;
         }
@@ -256,21 +269,132 @@ impl PlayerInventoryLedger {
         }
         for (cell, held) in backing {
             let corrected = self.confirmed.get(cell).cloned();
-            // If a later drop is rejected, it must reveal this corrected value rather
-            // than resurrect this drop's stale or rejected prediction.
-            for prediction in self
-                .committed_world_drops
-                .iter_mut()
-                .flat_map(|later| &mut later.predicted)
-            {
-                if prediction.cell == cell && prediction.before.as_ref().is_some_and(names_drop) {
-                    prediction.before = corrected.clone();
-                }
-            }
-            if !held.as_ref().is_some_and(names_drop) {
+            let source = request
+                .predicted
+                .iter()
+                .find(|prediction| prediction.cell == cell)
+                .expect("backing came from this prediction");
+            self.rebase_world_drop_dependents(cell, source.held.as_ref(), corrected);
+            if !same_stack_name(held.as_ref(), source.held.as_ref()) {
                 self.confirmed.set(cell, held);
             }
         }
+        true
+    }
+
+    /// Rebases drop rollback snapshots and rebuilds unsent descriptors along their source chain.
+    fn rebase_world_drop_dependents(&mut self, cell: Cell, from: Option<&Held>, to: Option<Held>) {
+        let server_authority = self.authority == Some(protocol::InventoryAuthority::Server);
+        let mut replacements = vec![(from.cloned(), to)];
+        let mut invalid = false;
+        for request in self
+            .committed_world_drops
+            .iter_mut()
+            .chain(self.queue.iter_mut())
+            .filter(|request| request.world_drop.is_some())
+        {
+            let amount = request
+                .actions
+                .iter()
+                .find_map(|action| match action {
+                    StackRequestAction::Drop { amount, .. } => Some(u16::from(*amount)),
+                    _ => None,
+                })
+                .expect("world drops have a drop action");
+            for prediction in &mut request.predicted {
+                if prediction.cell != cell {
+                    continue;
+                }
+                let Some((_, replacement)) = replacements
+                    .iter()
+                    .rev()
+                    .find(|(old, _)| same_stack_name(prediction.before.as_ref(), old.as_ref()))
+                else {
+                    continue;
+                };
+                prediction.before = replacement.clone();
+                if request.state != InventoryPendingState::AwaitingTransport {
+                    continue;
+                }
+                let Some(before) = prediction
+                    .before
+                    .as_ref()
+                    .filter(|held| held.stack.count >= amount)
+                else {
+                    invalid = true;
+                    continue;
+                };
+                let old = prediction.held.clone();
+                prediction.held = consumed_stack(
+                    Some(before),
+                    amount,
+                    server_authority.then_some(request.request_id),
+                );
+                let name = before.stack.stack_network_id;
+                for action in &mut request.actions {
+                    if let StackRequestAction::Drop { source, .. } = action {
+                        source.stack_network_id = name;
+                    }
+                }
+                for group in &mut request.groups {
+                    if let super::overlay::DeltaGroup::Shrink { source_id, .. } = group {
+                        *source_id = name;
+                    }
+                }
+                replacements.push((old, prediction.held.clone()));
+            }
+        }
+        if invalid {
+            self.retire_legacy_write(cell);
+        }
+    }
+
+    /// Publishes an admitted one-item use before exact drop descriptors are built or retried.
+    /// The caller's slot revision and source must still match the backing inventory.
+    pub fn settle_use_slot_change(
+        &mut self,
+        slot: u8,
+        revision: u64,
+        change: &protocol::PredictedSlotChange,
+    ) -> bool {
+        let cell = Cell::Inventory(slot);
+        if self.authoritative_slot_revision(slot) != Some(revision)
+            || !protocol::is_legacy_request_id(change.legacy_request_id)
+            || self
+                .queue
+                .iter()
+                .any(|request| request.world_drop.is_none() && request.touches(cell))
+            || change.to != change.from.less_one(change.legacy_request_id)
+        {
+            return false;
+        }
+        let Some(before) = self.confirmed.get(cell).cloned() else {
+            return false;
+        };
+        if verified(Some(&before)).ok().as_ref() != Some(&change.from) {
+            return false;
+        }
+        let after = consumed_stack(Some(&before), 1, Some(change.to.stack_network_id()));
+        for request in self
+            .committed_world_drops
+            .iter_mut()
+            .filter(|request| request.touches(cell))
+        {
+            let drop = request.world_drop.as_mut().expect("committed world drop");
+            drop.consumed_after = drop.consumed_after.saturating_add(1);
+            for prediction in &mut request.predicted {
+                if prediction.cell != cell {
+                    continue;
+                }
+                prediction.before = consumed_stack(prediction.before.as_ref(), 1, None);
+                let rename = same_stack_name(prediction.held.as_ref(), Some(&before))
+                    .then_some(change.to.stack_network_id());
+                prediction.held = consumed_stack(prediction.held.as_ref(), 1, rename);
+            }
+        }
+        self.confirmed.set(cell, after.clone());
+        self.rebase_world_drop_dependents(cell, Some(&before), after);
+        self.refold();
         true
     }
 
@@ -293,14 +417,38 @@ impl PlayerInventoryLedger {
     }
 }
 
-/// The id a world drop's remainder carries once sent: the legacy id paired with the drop's own
-/// request id, or `0` when the slot emptied.
+/// A world drop's reserved legacy id, or `0` when the slot emptied.
 fn world_drop_remainder_id(request: &PendingRequest) -> i32 {
     let remainder = request
         .predicted
         .first()
         .is_some_and(|prediction| prediction.held.is_some());
-    if remainder { request.request_id + 1 } else { 0 }
+    if remainder {
+        request
+            .world_drop
+            .expect("world drop identity")
+            .legacy_request_id
+    } else {
+        0
+    }
+}
+
+/// Whether two retained values carry the same stack name, including an empty result.
+fn same_stack_name(left: Option<&Held>, right: Option<&Held>) -> bool {
+    left.map(|held| held.stack.stack_network_id) == right.map(|held| held.stack.stack_network_id)
+}
+
+/// Removes admitted consumption from a snapshot, optionally assigning its surviving stack a name.
+fn consumed_stack(held: Option<&Held>, amount: u16, name: Option<i32>) -> Option<Held> {
+    let mut held = held?.clone();
+    held.stack.count = held.stack.count.saturating_sub(amount);
+    if held.stack.count == 0 {
+        return None;
+    }
+    if let Some(name) = name {
+        held.stack.stack_network_id = name;
+    }
+    Some(held)
 }
 
 /// `held` as a transaction leg named `name`, else by its own id, which may be a pending
@@ -316,7 +464,7 @@ fn descriptor(
     if name >= -1 && name == held.stack.stack_network_id {
         return verified(Some(held));
     }
-    // A verified stack carries a server id; check the rest, then apply the client-side name.
+    // Validate the retained item bytes before applying a pending request's client-side name.
     let mut unnamed = held.clone();
     unnamed.stack.stack_network_id = -1;
     Ok(verified(Some(&unnamed))?.renamed(name))

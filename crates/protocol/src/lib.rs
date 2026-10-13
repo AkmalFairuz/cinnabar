@@ -134,9 +134,10 @@ pub use inventory::{
     StackResponseContainer, StackResponseSlot, StackResponseStatus, UI_INVENTORY_WINDOW_ID,
     VerifiedNetworkItemStack, container_close_packet, inventory_drop_transaction_packet,
     is_legacy_request_id, item_stack_request_batch, item_stack_request_packet,
-    item_stack_request_packet_filtered, normal_inventory_transaction_packet, normalize_authority,
-    open_inventory_packet, personal_craft_content_indices, personal_craft_slot_index,
-    project_container_cell, validate_item_nbt_size,
+    item_stack_request_packet_filtered, next_legacy_request_id,
+    normal_inventory_transaction_packet, normalize_authority, open_inventory_packet,
+    personal_craft_content_indices, personal_craft_slot_index, project_container_cell,
+    validate_item_nbt_size,
 };
 pub use inventory::{
     CreativeCategory, CreativeContentEvent, CreativeGroup, CreativeItem, MAX_CREATIVE_GROUPS,
