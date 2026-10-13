@@ -248,7 +248,11 @@ pub(super) fn swing_before_tick(
     tick: u64,
 ) -> bool {
     swings.sync_ticks_for_item(authority, completed_tick, effects, item_duration);
-    swings.try_swing_before_tick(tick, effects.mining_tick(tick, completed_tick).0)
+    swings.try_swing_before_tick_for_item(
+        tick,
+        effects.mining_tick(tick, completed_tick).0,
+        item_duration,
+    )
 }
 
 #[cfg(test)]
@@ -281,5 +285,31 @@ mod drop_swing_tests {
         swings.sync_ticks_for_item(authority(2), 4, &effects, None);
 
         assert!(swings.take_started().is_some());
+    }
+
+    /// A drop keeps the selected item's Bedrock swing duration and the default Java timing.
+    #[test]
+    fn a_drop_swing_keeps_the_selected_items_swing_duration() {
+        const ITEM_DURATION: u32 = 19;
+        let effects = LocalMovementEffectTimeline::default();
+        let mut authored = SwingTracker::default();
+        let mut default = SwingTracker::default();
+
+        for (swings, duration) in [(&mut authored, Some(ITEM_DURATION)), (&mut default, None)] {
+            assert!(super::swing_before_tick(
+                swings,
+                authority(1),
+                4,
+                &effects,
+                duration,
+                5,
+            ));
+        }
+
+        assert_eq!(authored.take_started(), Some(ITEM_DURATION as i32));
+        let authored = authored.published_progress(6);
+        let default = default.published_progress(6);
+        assert_eq!(authored.bedrock[1], 1.0 / ITEM_DURATION as f32);
+        assert_eq!(authored.java, default.java);
     }
 }

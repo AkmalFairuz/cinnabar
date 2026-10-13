@@ -45,6 +45,7 @@ fn bone(
 
 fn geometry(identifier: &str, side: u16, bones: Vec<EntityGeometryBone>) -> EntityGeometry {
     EntityGeometry {
+        animation_no_head_bob: false,
         visible_bounds: None,
         identifier: identifier.into(),
         inherits: None,
