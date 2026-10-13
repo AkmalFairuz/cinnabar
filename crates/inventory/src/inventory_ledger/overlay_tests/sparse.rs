@@ -1,5 +1,55 @@
 use super::*;
 
+/// Rejecting a screen drop clears its empty prediction without restoring an older cursor owner.
+#[test]
+fn rejecting_an_empty_cursor_drop_does_not_restore_the_predecessor() {
+    let original = stack(6, 10, 4);
+    let mut ledger = open_ledger(&[(0, original.clone())]);
+    let take = ledger.begin_click(0).unwrap();
+    let drop = ledger.begin_drop(DropSource::Cursor, None).unwrap();
+    send_all(&mut ledger);
+
+    respond(&mut ledger, drop, StackResponseStatus::Rejected, vec![]);
+    assert_eq!(ledger.pending_request_id(), Some(take));
+    assert_eq!(ledger.pending_request_count(), 1);
+    assert!(ledger.cursor_stack().is_none());
+    assert!(ledger.confirmed_stack(Cell::Cursor).is_none());
+
+    respond(&mut ledger, take, StackResponseStatus::Rejected, vec![]);
+    assert_eq!(ledger.displayed_stack(0), Some(&original));
+    assert!(ledger.cursor_stack().is_none());
+    assert!(!ledger.resync_required());
+}
+
+/// An inactive empty screen prediction cannot claim unowned backing for a late correction.
+#[test]
+fn historic_empty_cursor_correction_does_not_restore_a_missing_sparse_owner() {
+    let mut ledger = open_ledger(&[(0, stack(6, 10, 4)), (1, stack(7, 11, 3))]);
+    let take = ledger.begin_click(0).unwrap();
+    let place = ledger.begin_click(5).unwrap();
+    let later_take = ledger.begin_click(1).unwrap();
+    send_all(&mut ledger);
+
+    respond(
+        &mut ledger,
+        later_take,
+        StackResponseStatus::Rejected,
+        vec![],
+    );
+    assert!(ledger.cursor_stack().is_none());
+    respond(
+        &mut ledger,
+        place,
+        StackResponseStatus::Accepted,
+        vec![correction(CONTAINER_NAME_CURSOR, 0, 4, 91)],
+    );
+    assert_eq!(ledger.pending_request_id(), Some(take));
+    assert!(ledger.cursor_stack().is_none());
+    assert!(ledger.confirmed_stack(Cell::Cursor).is_none());
+    assert_eq!(ledger.skipped_unknown_containers(), 1);
+    assert!(!ledger.resync_required());
+}
+
 #[test]
 fn normal_transaction_updates_backing_without_erasing_active_absolute_prediction() {
     let mut ledger = open_ledger(&[(0, stack(6, 77, 64))]);

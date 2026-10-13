@@ -2,6 +2,31 @@ use protocol::{ContainerCloseEvent, NO_CONTAINER_WINDOW_TYPE};
 
 use super::*;
 
+/// Rolling back a normal drop can restore an earlier screen request's empty backing owner.
+#[test]
+fn rejecting_take_place_and_empty_world_drop_restores_the_entire_stack() {
+    for order in [[0, 1, 2], [2, 1, 0], [1, 2, 0]] {
+        let original = digested(stack(6, 100, 3));
+        let mut ledger = known_ledger(&[(2, original.clone())]);
+        open_personal(&mut ledger);
+        let take = ledger.begin_click(2).unwrap();
+        let place = ledger.begin_click(2).unwrap();
+        let world = ledger.begin_world_drop(2, None).unwrap();
+        let legacy = drop_legacy_id(&ledger, world);
+        while ledger.pending_batch().unwrap().is_some() {
+            assert!(ledger.mark_transport_enqueued(20));
+        }
+        let ids = [take, place, legacy];
+        for index in order {
+            ledger.apply(&response(ids[index], StackResponseStatus::Rejected, None));
+        }
+        assert_eq!(ledger.displayed_stack(2), Some(&original));
+        assert!(ledger.cursor_stack().is_none());
+        assert_eq!(ledger.pending_request_count(), 0);
+        assert!(!ledger.resync_required());
+    }
+}
+
 /// Admits a screen drop and closes its window while retaining the pending reply.
 fn screen_drop_and_close(ledger: &mut PlayerInventoryLedger) -> i32 {
     open_personal(ledger);

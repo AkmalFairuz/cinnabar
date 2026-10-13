@@ -25,7 +25,7 @@ pub fn next_legacy_request_id() -> Option<i32> {
 /// Advances a legacy counter without wrapping into a previously allocated id.
 fn allocate_legacy_request_id(counter: &AtomicI32) -> Option<i32> {
     counter
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_sub(2))
+        .try_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_sub(2))
         .ok()
 }
 

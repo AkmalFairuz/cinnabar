@@ -67,6 +67,8 @@ pub(super) struct CellPrediction {
     pub(super) active: bool,
     /// No later authoritative write has invalidated this rollback source.
     pub(super) current: bool,
+    /// A later rollback explicitly restored this empty result into backing.
+    pub(super) owns_empty_backing: bool,
 }
 
 /// The durability a mine-block request predicts for one hotbar slot.
@@ -185,6 +187,7 @@ impl PlayerInventoryLedger {
                     held,
                     active: true,
                     current: true,
+                    owns_empty_backing: false,
                 }
             })
             .collect();
@@ -302,13 +305,40 @@ impl PlayerInventoryLedger {
                 && later.locally_committed()
                 && later.touches(cell)
         });
-        if !newer && (!rejected || same_name(self.confirmed.get(cell), from)) {
+        if !newer && (!rejected || self.request_owns_backing(request, cell, from)) {
             if !rejected {
                 self.invalidate_request_sources(cell, request.request_id);
             }
             self.confirmed.set(cell, to.clone());
+            if rejected
+                && to.is_none()
+                && let Some(previous) = self.queue.iter_mut().rev().find(|previous| {
+                    previous.request_id > request.request_id && previous.touches(cell)
+                })
+                && let Some(prediction) = previous.predicted.iter_mut().find(|p| p.cell == cell)
+                && prediction.current
+                && prediction.held.is_none()
+            {
+                prediction.owns_empty_backing = true;
+            }
         }
         self.rebase_predictions(request.request_id, cell, from, to);
+    }
+
+    /// Empty backing needs an admitted transaction or an explicit rollback restoring its owner.
+    fn request_owns_backing(
+        &self,
+        request: &PendingRequest,
+        cell: Cell,
+        predicted: Option<&Held>,
+    ) -> bool {
+        (predicted.is_some()
+            || request.locally_committed()
+            || request
+                .predicted
+                .iter()
+                .any(|prediction| prediction.cell == cell && prediction.owns_empty_backing))
+            && same_name(self.confirmed.get(cell), predicted)
     }
 
     /// Rebases all later rollback sources and replays only requests not yet transported.
@@ -485,7 +515,7 @@ impl PlayerInventoryLedger {
         if let Some(prediction) = prediction
             && !prediction.active
             && !(prediction.current
-                && same_name(self.confirmed.get(cell), prediction.held.as_ref()))
+                && self.request_owns_backing(request, cell, prediction.held.as_ref()))
             && !self
                 .queue
                 .iter()

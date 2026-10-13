@@ -2,6 +2,33 @@ use protocol::test_support::transactions::TransactionObservation;
 
 use super::*;
 
+/// An admitted empty drop can roll back until a server restatement invalidates its snapshot.
+#[test]
+fn rejecting_an_empty_world_drop_restores_only_its_current_backing() {
+    for refreshed in [false, true] {
+        let original = digested(stack(6, 100, 3));
+        let mut ledger = known_ledger(&[(2, original.clone())]);
+        let drop = ledger.begin_world_drop(2, None).unwrap();
+        let legacy = drop_legacy_id(&ledger, drop);
+        assert!(ledger.mark_transport_enqueued(0));
+        assert!(ledger.displayed_stack(2).is_none());
+        if refreshed {
+            ledger.apply(&InventoryEvent::Slot(InventorySlotEvent {
+                identity: SlotIdentity {
+                    container: ContainerIdentity::window(0),
+                    slot: 2,
+                },
+                stack: NetworkItemStack::empty(),
+                storage_item: None,
+            }));
+        }
+        ledger.apply(&response(legacy, StackResponseStatus::Rejected, None));
+        assert_eq!(ledger.displayed_stack(2), (!refreshed).then_some(&original));
+        assert_eq!(ledger.pending_request_count(), 0);
+        assert!(!ledger.resync_required());
+    }
+}
+
 /// Observes the next drop's exact descriptors without admitting its transport.
 fn queued_transaction(ledger: &PlayerInventoryLedger) -> TransactionObservation {
     let (packet, count) = ledger.pending_batch().unwrap().unwrap();
