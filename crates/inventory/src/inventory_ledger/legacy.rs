@@ -24,9 +24,14 @@ impl PlayerInventoryLedger {
         }
     }
 
-    pub(super) fn set_authoritative_cell(&mut self, cell: Cell, held: Option<Held>) -> bool {
+    /// Retires obsolete transactions and rollback sources before a server writes this cell.
+    pub(super) fn prepare_authoritative_cell(&mut self, cell: Cell) {
         self.retire_legacy_write(cell);
         self.invalidate_request_sources(cell, i32::MIN);
+    }
+
+    pub(super) fn set_authoritative_cell(&mut self, cell: Cell, held: Option<Held>) -> bool {
+        self.prepare_authoritative_cell(cell);
         let written = self.confirmed.set(cell, held);
         if written {
             self.note_observed_gear(cell);
