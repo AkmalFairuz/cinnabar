@@ -54,16 +54,27 @@ impl PlayerInventoryLedger {
         }
     }
 
-    /// Renames every queued action's reference to stack `from` as `to`.
+    /// Renames action references and retained stack descriptors from `from` to `to`.
     pub(super) fn rename_request_dependencies(&mut self, from: i32, to: i32) {
-        for slot in self
+        for request in self
             .queue
             .iter_mut()
-            .flat_map(|request| request.actions.iter_mut())
-            .flat_map(action_slots_mut)
+            .chain(self.committed_world_drops.iter_mut())
         {
-            if slot.stack_network_id == from {
-                slot.stack_network_id = to;
+            for slot in request.actions.iter_mut().flat_map(action_slots_mut) {
+                if slot.stack_network_id == from {
+                    slot.stack_network_id = to;
+                }
+            }
+            for held in request.predicted.iter_mut().flat_map(|prediction| {
+                prediction
+                    .before
+                    .iter_mut()
+                    .chain(prediction.held.iter_mut())
+            }) {
+                if held.stack.stack_network_id == from {
+                    held.stack.stack_network_id = to;
+                }
             }
         }
     }

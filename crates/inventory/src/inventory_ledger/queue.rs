@@ -40,7 +40,7 @@ pub(super) struct PendingRequest {
     pub(super) storage_identity: Option<ContainerIdentity>,
     /// Its storage window closed while it settles; its storage cells belong to no visible window.
     pub(super) storage_detached: bool,
-    /// A split must end with distinct positive server ids on surviving halves.
+    /// A split must end with distinct settled stack ids on surviving halves.
     pub(super) requires_distinct_stack_ids: bool,
     /// A merge whose capacity came from the session item registry.
     pub(super) registry_bound_merge: bool,
@@ -186,10 +186,15 @@ impl PlayerInventoryLedger {
     /// distinguishes even two halves stamped by the same split request. A
     /// negative even id names what a sent drop transaction left behind.
     pub(super) fn awaiting_identity(&self, held: &Held) -> bool {
+        self.stack_awaiting_identity(&held.stack)
+    }
+
+    /// Whether a stack lacks a server id, a settled legacy id, or a queued sparse owner.
+    pub(super) fn stack_awaiting_identity(&self, stack: &protocol::NetworkItemStack) -> bool {
         if self.authority == Some(protocol::InventoryAuthority::Client) {
             return false;
         }
-        let id = held.stack.stack_network_id;
+        let id = stack.stack_network_id;
         id <= 0
             && !protocol::is_legacy_request_id(id)
             && !(id < -1
@@ -252,7 +257,8 @@ impl PlayerInventoryLedger {
         }
     }
 
-    fn settle(&mut self, request: &PendingRequest) {
+    /// Applies accepted corrections from the request's retained cell snapshots.
+    pub(super) fn settle(&mut self, request: &PendingRequest) {
         let containers = request
             .accepted
             .clone()
@@ -312,7 +318,11 @@ impl PlayerInventoryLedger {
         cell: Cell,
         correction: &StackResponseSlot,
     ) {
-        if (correction.count == 0) != (correction.item_stack_id <= 0) {
+        if (correction.count == 0 && correction.item_stack_id > 0)
+            || (correction.count > 0
+                && correction.item_stack_id <= 0
+                && !protocol::is_legacy_request_id(correction.item_stack_id))
+        {
             tracing::warn!(target: "cinnabar::inventory_requests",
                 request_id = request.request_id, slot = correction.slot,
                 count = correction.count, stack_id = correction.item_stack_id,
@@ -336,6 +346,10 @@ impl PlayerInventoryLedger {
             // after a newer owner was removed.
             self.note_unrouted_container();
             return;
+        }
+        if !request.world_drop {
+            self.committed_world_drops
+                .retain(|drop| !drop.touches(cell));
         }
         self.note_authoritative_write(cell);
         if correction.count == 0 {
@@ -374,7 +388,7 @@ impl PlayerInventoryLedger {
             cells.push(cell);
             if let Some(held) = self.confirmed.get(cell) {
                 let id = held.stack.stack_network_id;
-                if id <= 0 || ids.contains(&id) {
+                if (id <= 0 && !protocol::is_legacy_request_id(id)) || ids.contains(&id) {
                     return false;
                 }
                 ids.push(id);

@@ -14,6 +14,8 @@ use super::*;
 #[path = "storage_quick_move_tests.rs"]
 mod storage_tests;
 
+mod world_drop;
+
 fn stack(network_id: i32, stack_network_id: i32, count: u16) -> NetworkItemStack {
     NetworkItemStack {
         network_id,

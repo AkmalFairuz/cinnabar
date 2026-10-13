@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use protocol::{
     NetworkItemStack, NormalInventoryChange, NormalInventorySource, Packet, StackRequestAction,
-    VerifiedNetworkItemStack, inventory_drop_transaction_packet,
-    normal_inventory_transaction_packet,
+    StackResponse, StackResponseStatus, VerifiedNetworkItemStack,
+    inventory_drop_transaction_packet, normal_inventory_transaction_packet,
 };
 
 use super::cells::Held;
@@ -39,6 +41,8 @@ impl PlayerInventoryLedger {
 
     pub(super) fn set_authoritative_cell(&mut self, cell: Cell, held: Option<Held>) -> bool {
         self.retire_legacy_write(cell);
+        self.committed_world_drops
+            .retain(|request| !request.touches(cell));
         let written = self.confirmed.set(cell, held);
         if written {
             self.note_observed_gear(cell);
@@ -163,24 +167,110 @@ impl PlayerInventoryLedger {
         })
     }
 
-    /// A sent drop becomes local truth, as the native client's prediction does: servers restate
-    /// the slot only when they disagree. Its remainder and every later request name the
-    /// remainder by the drop's legacy id from then on.
+    /// Commits a sent drop while keeping its optional legacy response separate from pending work.
+    /// Its remainder and later requests use the transaction's legacy id.
     pub(super) fn commit_world_drop(&mut self, index: usize) -> bool {
-        let request: PendingRequest = self.queue.remove(index).expect("index observed");
+        let mut request: PendingRequest = self.queue.remove(index).expect("index observed");
         let remainder = world_drop_remainder_id(&request);
-        if self.request_is_current(&request) {
-            for prediction in request.predicted {
-                let held = prediction.held.map(|mut held| {
+        let current = self.request_is_current(&request);
+        if current {
+            for prediction in &mut request.predicted {
+                if let Some(held) = &mut prediction.held {
                     held.stack.stack_network_id = remainder;
-                    held
-                });
-                self.confirmed.set(prediction.cell, held);
+                }
+                self.confirmed.set(prediction.cell, prediction.held.clone());
             }
         }
         self.rename_request_dependencies(request.request_id, remainder);
+        if current && remainder != 0 {
+            request.state = InventoryPendingState::AwaitingResponse;
+            request.transport_deadline_millis = None;
+            if self.committed_world_drops.len() >= super::MAX_PENDING_REQUESTS {
+                self.committed_world_drops.pop_front();
+            }
+            self.committed_world_drops.push_back(request);
+        }
         self.refold();
         self.finish_closing();
+        true
+    }
+
+    /// Reconciles one optional drop response by its emitted even id, once, without delaying play.
+    pub(super) fn apply_world_drop_response(&mut self, response: &StackResponse) -> bool {
+        let Some(index) = self
+            .committed_world_drops
+            .iter()
+            .position(|request| request.request_id + 1 == response.request_id)
+        else {
+            return false;
+        };
+        let mut request = self
+            .committed_world_drops
+            .remove(index)
+            .expect("index observed");
+        if !self.request_is_current(&request) {
+            return true;
+        }
+        let names_drop = |held: &Held| held.stack.stack_network_id == response.request_id;
+        let backing: Vec<_> = request
+            .predicted
+            .iter()
+            .map(|prediction| {
+                (
+                    prediction.cell,
+                    self.confirmed.get(prediction.cell).cloned(),
+                )
+            })
+            .collect();
+        let owns_backing = backing
+            .iter()
+            .any(|(_, held)| held.as_ref().is_some_and(names_drop));
+        let owns_history = self
+            .committed_world_drops
+            .iter()
+            .flat_map(|later| &later.predicted)
+            .any(|prediction| prediction.before.as_ref().is_some_and(names_drop));
+        if !owns_backing && !owns_history {
+            return true;
+        }
+        for prediction in &mut request.predicted {
+            prediction.active = true;
+        }
+        match response.status {
+            StackResponseStatus::Accepted => {
+                // Reconcile against this drop's snapshot, even when a later sent drop
+                // currently owns the backing cell. Restore that newer value below.
+                for prediction in &request.predicted {
+                    self.confirmed.set(prediction.cell, prediction.held.clone());
+                }
+                request.accepted = Some(Arc::clone(&response.containers));
+                self.settle(&request);
+            }
+            StackResponseStatus::Rejected => {
+                for prediction in &request.predicted {
+                    self.confirmed
+                        .set(prediction.cell, prediction.before.clone());
+                }
+            }
+            StackResponseStatus::Unknown(_) => return true,
+        }
+        for (cell, held) in backing {
+            let corrected = self.confirmed.get(cell).cloned();
+            // If a later drop is rejected, it must reveal this corrected value rather
+            // than resurrect this drop's stale or rejected prediction.
+            for prediction in self
+                .committed_world_drops
+                .iter_mut()
+                .flat_map(|later| &mut later.predicted)
+            {
+                if prediction.cell == cell && prediction.before.as_ref().is_some_and(names_drop) {
+                    prediction.before = corrected.clone();
+                }
+            }
+            if !held.as_ref().is_some_and(names_drop) {
+                self.confirmed.set(cell, held);
+            }
+        }
         true
     }
 

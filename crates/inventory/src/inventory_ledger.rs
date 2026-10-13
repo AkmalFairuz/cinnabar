@@ -218,6 +218,8 @@ pub struct PlayerInventoryLedger {
     /// Bundle contents by dynamic container id.
     bundles: BTreeMap<u32, Vec<NetworkItemStack>>,
     queue: VecDeque<PendingRequest>,
+    /// Sent drops kept only to correlate optional legacy transaction responses.
+    committed_world_drops: VecDeque<PendingRequest>,
     pending_world_drops: usize,
     next_request_id: i32,
     session_generation: u64,
@@ -264,6 +266,7 @@ impl Default for PlayerInventoryLedger {
             enchant_options: None,
             bundles: BTreeMap::new(),
             queue: VecDeque::new(),
+            committed_world_drops: VecDeque::new(),
             pending_world_drops: 0,
             next_request_id: -3,
             session_generation: 0,
@@ -951,6 +954,8 @@ impl PlayerInventoryLedger {
     /// Requires a refresh independently of any abandoned request's eventual answer.
     fn mark_cell_recovery(&mut self, cell: Cell) {
         self.disown_abandoned_recovery(cell.surface());
+        self.committed_world_drops
+            .retain(|drop| !drop.touches(cell));
         if let Some(held) = self.confirmed.get_mut(cell) {
             held.overlay = None;
         }

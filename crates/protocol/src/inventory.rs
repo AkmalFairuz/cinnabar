@@ -325,6 +325,7 @@ pub struct VerifiedNetworkItemStack {
 }
 
 impl VerifiedNetworkItemStack {
+    /// Checks retained item bytes and shape, including settled legacy transaction ids.
     pub fn try_new(
         stack: NetworkItemStack,
         expected_digest: [u8; 32],
@@ -759,7 +760,9 @@ fn validate_stack_shape(stack: &NetworkItemStack) -> Result<(), InventoryPacketE
     if stack.network_id == 0 {
         return Err(InventoryPacketError::InvalidItemNetworkId(stack.network_id));
     }
-    if stack.stack_network_id == 0 || stack.stack_network_id < -1 {
+    if stack.stack_network_id == 0
+        || (stack.stack_network_id < -1 && !is_legacy_request_id(stack.stack_network_id))
+    {
         return Err(InventoryPacketError::InvalidStackNetworkId(
             stack.stack_network_id,
         ));
