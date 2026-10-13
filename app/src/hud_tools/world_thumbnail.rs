@@ -30,13 +30,16 @@ const RECAPTURE: Duration = Duration::from_secs(60);
 const CROP_SHARE: u32 = 70;
 const JPEG_QUALITY: u8 = 80;
 
+/// Encoded JPEG thumbnails by world id, handed from the encoder to the store system.
+type EncodedThumbnails = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
+
 /// Which world is being captured, when its next capture is due, and finished thumbnails
 /// waiting to be stored.
 #[derive(Resource, Default)]
 struct WorldThumbnailCapture {
     world: Option<String>,
     next_at: Option<Duration>,
-    encoded: Arc<Mutex<Vec<(String, Vec<u8>)>>>,
+    encoded: EncodedThumbnails,
 }
 
 pub(super) fn configure(app: &mut App) {
