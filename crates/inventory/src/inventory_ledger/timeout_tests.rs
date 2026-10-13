@@ -199,3 +199,116 @@ fn teardown_discards_expired_personal_controls_and_held_retries() {
         assert!(ledger.mark_transport_enqueued(40 + INVENTORY_REQUEST_TIMEOUT_MILLIS));
     }
 }
+
+/// Supplies the authoritative result of taking the stack installed by `open_storage`.
+fn accept_storage_pickup(ledger: &mut PlayerInventoryLedger, request_id: i32) {
+    ledger.apply(&InventoryEvent::Response(ItemStackResponseEvent {
+        responses: Arc::from([StackResponse {
+            status: StackResponseStatus::Accepted,
+            request_id,
+            containers: Arc::from([
+                correction(GENERIC_STORAGE_SLOT_TYPE, 0, 0, 0),
+                correction(CONTAINER_NAME_CURSOR, 0, 3, 23),
+            ]),
+        }]),
+    }));
+}
+
+/// Creates a close reply with the supplied window identity.
+fn close_reply(window_id: i32, window_type: i8) -> InventoryEvent {
+    InventoryEvent::Close(ContainerCloseEvent {
+        container: ContainerIdentity::window(window_id),
+        window_type,
+        server_initiated: false,
+    })
+}
+
+#[test]
+fn expired_personal_close_allows_storage_acknowledgements_to_preserve_pending_moves() {
+    for late_open_cleanup in [false, true] {
+        for storage_window_id in [2, 3] {
+            for personal_ack_first in [false, true] {
+                let mut ledger = expired_personal_ledger(!late_open_cleanup);
+                let now = 40 + INVENTORY_REQUEST_TIMEOUT_MILLIS;
+                if late_open_cleanup {
+                    ledger.apply(&InventoryEvent::Open(personal_open(2)));
+                    assert!(ledger.mark_transport_enqueued(now));
+                }
+                open_storage(&mut ledger, storage_window_id, GENERIC_STORAGE_WINDOW_TYPE);
+                let request = ledger.begin_storage_click(0).unwrap();
+                assert!(ledger.mark_transport_enqueued(now + 1));
+                ledger.request_storage_close();
+                assert!(ledger.mark_transport_enqueued(now + 2));
+                let personal_ack = close_reply(2, PERSONAL_INVENTORY_WINDOW_TYPE);
+                if personal_ack_first {
+                    ledger.apply(&personal_ack);
+                }
+                ledger.apply(&close_reply(storage_window_id, GENERIC_STORAGE_WINDOW_TYPE));
+                assert_eq!(ledger.window_kind(), None);
+                assert_eq!(ledger.pending_request_id(), Some(request));
+
+                // Reuse the chest ID while its old move still awaits the server's answer.
+                open_storage(&mut ledger, storage_window_id, GENERIC_STORAGE_WINDOW_TYPE);
+                if !personal_ack_first {
+                    ledger.apply(&personal_ack);
+                }
+                accept_storage_pickup(&mut ledger, request);
+                assert_eq!(ledger.cursor_stack(), Some(&stack(23, 3)));
+                assert_eq!(ledger.storage_stack(0), Some(&stack(23, 3)));
+                assert_eq!(ledger.pending_request_id(), None);
+                assert!(!ledger.resync_required());
+            }
+        }
+    }
+}
+
+#[test]
+fn expired_personal_reply_cannot_acknowledge_an_unsent_storage_close() {
+    let mut ledger = expired_personal_ledger(true);
+    let now = 40 + INVENTORY_REQUEST_TIMEOUT_MILLIS;
+    open_storage(&mut ledger, 3, GENERIC_STORAGE_WINDOW_TYPE);
+    let request = ledger.begin_storage_click(0).unwrap();
+    assert!(ledger.mark_transport_enqueued(now));
+    ledger.request_storage_close();
+    let reply = close_reply(3, GENERIC_STORAGE_WINDOW_TYPE);
+    ledger.apply(&reply);
+    assert!(ledger.window_kind().is_some());
+    assert!(ledger.pending_control_packet().unwrap().is_some());
+    assert_eq!(ledger.pending_request_id(), Some(request));
+
+    assert!(ledger.mark_transport_enqueued(now + 1));
+    ledger.apply(&reply);
+    assert_eq!(ledger.window_kind(), None);
+    open_storage(&mut ledger, 4, GENERIC_STORAGE_WINDOW_TYPE);
+    accept_storage_pickup(&mut ledger, request);
+    assert_eq!(ledger.cursor_stack(), Some(&stack(23, 3)));
+    assert_eq!(ledger.storage_stack(0), Some(&stack(23, 3)));
+    assert!(!ledger.resync_required());
+}
+
+#[test]
+fn storage_close_before_late_personal_open_preserves_moves_through_retry() {
+    let mut ledger = expired_personal_ledger(false);
+    let now = 40 + INVENTORY_REQUEST_TIMEOUT_MILLIS;
+    assert!(ledger.request_personal_open(42));
+    open_storage(&mut ledger, 3, GENERIC_STORAGE_WINDOW_TYPE);
+    let request = ledger.begin_storage_click(0).unwrap();
+    assert!(ledger.mark_transport_enqueued(now));
+    ledger.request_storage_close();
+    assert!(ledger.mark_transport_enqueued(now + 1));
+    ledger.apply(&close_reply(3, GENERIC_STORAGE_WINDOW_TYPE));
+    assert_eq!(ledger.window_kind(), None);
+    assert!(ledger.pending_control_packet().unwrap().is_none());
+
+    ledger.apply(&InventoryEvent::Open(personal_open(2)));
+    assert!(ledger.mark_transport_enqueued(now + 2));
+    ledger.apply(&close_reply(2, PERSONAL_INVENTORY_WINDOW_TYPE));
+    assert!(ledger.pending_control_packet().unwrap().is_some());
+    assert!(ledger.mark_transport_enqueued(now + 3));
+    ledger.apply(&InventoryEvent::Open(personal_open(4)));
+    accept_storage_pickup(&mut ledger, request);
+    assert_eq!(ledger.cursor_stack(), Some(&stack(23, 3)));
+    assert_eq!(ledger.pending_request_id(), None);
+    assert!(ledger.personal_inventory_desired_open());
+    assert!(!ledger.resync_required());
+}

@@ -106,11 +106,23 @@ impl PlayerInventoryLedger {
                 if personal_close.is_some()
                     && let Some(expired) = self.expired_personal.take()
                 {
-                    // Retire only this control, preserving storage and its queued close and inputs.
+                    // An expired control cannot close an open storage screen or consume its
+                    // unsent close. An admitted storage close still needs to settle its requests.
                     self.pending_closes.retain(|pending| {
                         pending.owner.personal_generation() != Some(expired.generation())
                     });
-                    return;
+                    let storage_awaiting_ack = self.storage.as_ref().is_some_and(|storage| {
+                        storage.closing
+                            && close.container.window_id == Some(storage.window_id)
+                            && close.window_type == storage.window_type
+                            && !self.pending_closes.iter().any(|pending| {
+                                pending.window_id == storage.window_id
+                                    && pending.window_type == storage.window_type
+                            })
+                    });
+                    if !storage_awaiting_ack {
+                        return;
+                    }
                 }
                 // A stale response cannot consume the close before it has
                 // reached the transport, even when its payload happens to match.
