@@ -13,7 +13,13 @@ impl WorldStream {
             self.record_normalization_error(NormalizationErrorReason::BlockMutationFailure);
         }
         if collision_authoritative {
-            self.requests.recoveries.remove(&key);
+            if let Some(recoveries) = self.requests.recoveries.get_mut(&chunk) {
+                recoveries.remove(&key.y);
+                if recoveries.is_empty() {
+                    self.requests.recoveries.remove(&chunk);
+                    self.requests.collision_failures.remove(&chunk);
+                }
+            }
         } else {
             self.schedule_sub_chunk_recovery(key);
         }
@@ -280,49 +286,66 @@ impl WorldStream {
     /// Marks sub-chunk `key` abandoned; the next recovery pass asks for it again after a delay
     /// that doubles each time it is abandoned, up to [`MAX_SUB_CHUNK_RECOVERY_DELAY`].
     fn schedule_sub_chunk_recovery(&mut self, key: SubChunkKey) {
-        let recovery = self.requests.recoveries.entry(key).or_default();
+        let recovery = self
+            .requests
+            .recoveries
+            .entry(key.chunk())
+            .or_default()
+            .entry(key.y)
+            .or_default();
         recovery.rounds = recovery.rounds.saturating_add(1);
-        recovery.in_flight = false;
         recovery.due = None;
     }
 
-    /// Times newly abandoned sub-chunks from `now` and requests every one whose delay has passed
-    /// while its column is still in view; columns that left the view forget theirs.
+    /// Visits recovery columns under the poll budget, resuming after the last visited column.
+    /// Each column has at most one dimension's slots; due slots share exact request ranges.
     pub(super) fn request_due_sub_chunk_recoveries(&mut self, now: Instant) {
-        if self.requests.recoveries.is_empty() {
-            return;
-        }
-        let mut due = Vec::new();
-        for (key, recovery) in &mut self.requests.recoveries {
-            if recovery.in_flight {
+        use std::ops::Bound::{Excluded, Unbounded};
+
+        let columns = self.requests.recoveries.len();
+        let mut checked = 0;
+        while checked < columns && (checked == 0 || !self.poll_budget_exhausted()) {
+            let next = self
+                .requests
+                .recovery_cursor
+                .and_then(|cursor| {
+                    self.requests
+                        .recoveries
+                        .range((Excluded(cursor), Unbounded))
+                        .next()
+                })
+                .or_else(|| self.requests.recoveries.first_key_value());
+            let Some((&chunk, _)) = next else {
+                break;
+            };
+            self.requests.recovery_cursor = Some(chunk);
+            checked += 1;
+            if !self.column_is_data_interesting(chunk) {
+                self.requests.recoveries.remove(&chunk);
                 continue;
             }
-            let at = *recovery.due.get_or_insert_with(|| {
-                let doublings = recovery.rounds.saturating_sub(1).min(3);
-                now + SUB_CHUNK_RECOVERY_DELAY
-                    .saturating_mul(1 << doublings)
-                    .min(MAX_SUB_CHUNK_RECOVERY_DELAY)
-            });
-            if at <= now {
-                due.push(*key);
-            }
-        }
-        let mut columns: BTreeMap<ChunkKey, Vec<i32>> = BTreeMap::new();
-        for key in due {
-            if !self.column_is_data_interesting(key.chunk()) {
-                self.requests.recoveries.remove(&key);
+            let Some(range) = self.authority.dimension_range(chunk.dimension) else {
                 continue;
+            };
+            let expected = self.requests.requested.get(&chunk);
+            let recoveries = self.requests.recoveries.get_mut(&chunk).unwrap();
+            let mut due = Vec::new();
+            for (&y, recovery) in recoveries {
+                if expected.is_some_and(|column| column.contains_key(&y)) {
+                    continue;
+                }
+                let at = *recovery.due.get_or_insert_with(|| {
+                    let doublings = recovery.rounds.saturating_sub(1).min(3);
+                    now + SUB_CHUNK_RECOVERY_DELAY
+                        .saturating_mul(1 << doublings)
+                        .min(MAX_SUB_CHUNK_RECOVERY_DELAY)
+                });
+                if at <= now {
+                    due.push(y);
+                }
             }
-            if let Some(recovery) = self.requests.recoveries.get_mut(&key) {
-                recovery.in_flight = true;
-            }
-            if !self.requests.is_expected(key) {
-                columns.entry(key.chunk()).or_default().push(key.y);
-            }
-        }
-        for (chunk, ys) in columns {
-            if let Some(range) = self.authority.dimension_range(chunk.dimension) {
-                self.enqueue_exact_recovery_requests(chunk, range, &ys, None);
+            if !due.is_empty() {
+                self.enqueue_exact_recovery_requests(chunk, range, &due, None);
             }
         }
     }

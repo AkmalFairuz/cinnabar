@@ -16,8 +16,6 @@ pub(super) type PendingSubChunkColumn = BTreeMap<i32, PendingSubChunk>;
 pub(super) struct SubChunkRecovery {
     /// When to ask again; `None` until the next recovery pass times the latest abandonment.
     pub(super) due: Option<Instant>,
-    /// Whether the repeated request is out, so the next answer or abandonment settles it.
-    pub(super) in_flight: bool,
     /// How many times it was abandoned, which spaces the next request.
     pub(super) rounds: u8,
 }
