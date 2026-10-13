@@ -272,3 +272,27 @@ fn rejecting_screen_history_preserves_a_newer_slot_write() {
         }
     }
 }
+
+#[test]
+fn rejecting_a_swap_cancels_unsent_drops_instead_of_retargeting_the_restored_item() {
+    for (network_id, metadata) in [(8, 0), (6, 1)] {
+        let original = digested(stack(6, 100, 5));
+        let mut swapped = stack(network_id, 200, 5);
+        swapped.metadata = metadata;
+        let swapped = digested(swapped);
+        let mut ledger = known_ledger(&[(2, original.clone()), (20, swapped.clone())]);
+        open_personal(&mut ledger);
+        let swap = ledger
+            .begin_hotbar_swap(InventoryTarget::Player(20), 2)
+            .unwrap();
+        assert!(ledger.mark_transport_enqueued(20));
+        ledger.begin_world_drop(2, Some(1)).unwrap();
+        ledger.begin_world_drop(2, Some(1)).unwrap();
+        ledger.apply(&response(swap, StackResponseStatus::Rejected, None));
+        assert!(ledger.pending_batch().unwrap().is_none());
+        assert_eq!(ledger.pending_request_count(), 0);
+        assert_eq!(ledger.displayed_stack(2), Some(&original));
+        assert_eq!(ledger.displayed_stack(20), Some(&swapped));
+        assert!(!ledger.resync_required());
+    }
+}

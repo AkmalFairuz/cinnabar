@@ -322,7 +322,7 @@ impl PlayerInventoryLedger {
         let mut replacements = vec![(cell, from.cloned(), to)];
         let mut queue = std::mem::take(&mut self.queue);
         let mut invalid = None;
-        for request in queue
+        'requests: for request in queue
             .iter_mut()
             .filter(|request| request.request_id < predecessor)
         {
@@ -338,6 +338,15 @@ impl PlayerInventoryLedger {
                             && same_name(prediction.before.as_ref(), old.as_ref())
                     })
                 {
+                    let same_item = match (prediction.before.as_ref(), replacement.as_ref()) {
+                        (Some(before), Some(after)) => Self::same_item(&before.stack, &after.stack),
+                        (None, None) => true,
+                        _ => false,
+                    };
+                    if request.state == InventoryPendingState::AwaitingTransport && !same_item {
+                        invalid = Some(request.request_id);
+                        break 'requests;
+                    }
                     prediction.before = replacement.clone();
                     changed = true;
                 }
@@ -352,6 +361,9 @@ impl PlayerInventoryLedger {
                     .iter_mut()
                     .flat_map(super::helpers::action_slots_mut)
                 {
+                    if slot.stack_network_id == request.request_id {
+                        continue;
+                    }
                     if let Some(cell) = self.request_cell(*slot) {
                         slot.stack_network_id = cells
                             .get(cell)
@@ -612,7 +624,8 @@ impl PlayerInventoryLedger {
 
     /// Drops matching requests. Unsent ones roll back together with every later
     /// unsent request built on them; admitted ones become ambiguous and mark
-    /// their cells for authoritative recovery.
+    /// their cells for authoritative recovery. Client authority restores the
+    /// newest surviving prediction on each cell before refolding.
     pub(super) fn abandon_requests(&mut self, matches: impl Fn(&PendingRequest) -> bool) {
         let mut rolling_back = false;
         let mut index = 0;
@@ -629,6 +642,20 @@ impl PlayerInventoryLedger {
                 continue;
             }
             index += 1;
+        }
+        if self.authority == Some(protocol::InventoryAuthority::Client) {
+            let mut owned = Vec::new();
+            for prediction in self
+                .queue
+                .iter_mut()
+                .rev()
+                .flat_map(|request| request.predicted.iter_mut().rev())
+            {
+                prediction.active = !owned.contains(&prediction.cell);
+                if prediction.active {
+                    owned.push(prediction.cell);
+                }
+            }
         }
         self.refold();
     }
