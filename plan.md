@@ -8419,3 +8419,13 @@ server-raster precedence, diagnostic fallback, and admission refusals. Live
 visual verification remains pending. Block-item sheets and inventory icons
 still use placeholders for borrowed faces, and animated vanilla art remains
 limited to base blocks.
+
+## Cubeless server geometry draws nothing
+
+Server packs pair a cubeless geometry with a null texture to hide a block
+state (furniture anchors, empty vessels). The overlay compiler renders
+cubeless geometry invisible with no gap counted. Geometry emptied by
+rejected cubes keeps the diagnostic visual and its skipped-cube count.
+Fully hidden valid cubes still return invisible, even if another cube was
+rejected. Regressions cover all three cases in hashed and palette sessions,
+including visual support, gap counts, and session application.

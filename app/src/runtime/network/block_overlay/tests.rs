@@ -29,6 +29,7 @@ fn compile_block_overlay(
 mod budget;
 mod builtins;
 mod capacity;
+mod empty_geometry;
 mod flipbooks;
 mod hd_textures;
 mod legacy;
