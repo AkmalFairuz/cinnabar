@@ -3,6 +3,10 @@ use super::*;
 use launcher::local_worlds::world::NewWorld;
 
 /// Supplies a connected request queue whose worker has not consumed any work yet.
+#[allow(
+    clippy::field_reassign_with_default,
+    reason = "LocalWorlds implements Drop, so struct update cannot move its fields"
+)]
 fn queued_worlds(
     manager: Manager,
     socket_dir: PathBuf,
@@ -16,15 +20,10 @@ fn queued_worlds(
         revoked: Arc::new(Mutex::new(false)),
         _core: core,
     };
-    (
-        LocalWorlds {
-            manager: Some(manager),
-            client: Some(client),
-            ..Default::default()
-        },
-        requests,
-        replies,
-    )
+    let mut worlds = LocalWorlds::default();
+    worlds.manager = Some(manager);
+    worlds.client = Some(client);
+    (worlds, requests, replies)
 }
 
 #[test]

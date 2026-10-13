@@ -68,7 +68,7 @@ impl MenuRuntime {
     #[must_use]
     pub fn playing_local_world(&self) -> Option<&str> {
         self.local_world_active
-            .then(|| self.local_ui.world_id.as_deref())
+            .then_some(self.local_ui.world_id.as_deref())
             .flatten()
     }
 
