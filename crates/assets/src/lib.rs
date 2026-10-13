@@ -33,7 +33,7 @@ mod glyph_sheet;
 pub mod gui_item;
 mod hud;
 pub mod hud_extras;
-mod icon;
+pub mod icon;
 pub mod item;
 mod lang;
 mod light_registry;
