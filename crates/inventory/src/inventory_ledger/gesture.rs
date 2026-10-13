@@ -511,6 +511,7 @@ impl PlayerInventoryLedger {
             furnace_route: None,
             predicted: Vec::new(),
             mining: None,
+            world_drop: false,
         });
         Ok(request_id)
     }

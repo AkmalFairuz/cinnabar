@@ -541,10 +541,17 @@ impl PlayerInventoryLedger {
                 .legacy_pending_packet()
                 .map(|packet| packet.map(|packet| (packet, 1)));
         }
-        let requests: Vec<_> = self
+        let mut ready = self
             .queue
             .iter()
             .filter(|pending| pending.state == InventoryPendingState::AwaitingTransport)
+            .peekable();
+        if let Some(drop) = ready.next_if(|pending| pending.world_drop) {
+            return self.world_drop_packet(drop).map(|packet| Some((packet, 1)));
+        }
+        // A later drop leaves in its own packet, after the requests queued before it.
+        let requests: Vec<_> = ready
+            .take_while(|pending| !pending.world_drop)
             .map(|pending| {
                 (
                     pending.request_id,
@@ -616,13 +623,17 @@ impl PlayerInventoryLedger {
         if self.authority == Some(InventoryAuthority::Client) {
             return self.commit_legacy_transport();
         }
-        let Some(pending) = self
+        let Some(index) = self
             .queue
-            .iter_mut()
-            .find(|pending| pending.state == InventoryPendingState::AwaitingTransport)
+            .iter()
+            .position(|pending| pending.state == InventoryPendingState::AwaitingTransport)
         else {
             return false;
         };
+        if self.queue[index].world_drop {
+            return self.commit_world_drop(index);
+        }
+        let pending = &mut self.queue[index];
         pending.state = InventoryPendingState::AwaitingResponse;
         tracing::debug!(target: "cinnabar::inventory_requests",
             request_id = pending.request_id, "inventory request admitted to transport");

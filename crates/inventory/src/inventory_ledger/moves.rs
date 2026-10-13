@@ -94,6 +94,13 @@ impl PlayerInventoryLedger {
             amount,
             false,
         )?;
+        if let Some(pending) = self
+            .queue
+            .iter_mut()
+            .find(|pending| pending.request_id == request)
+        {
+            pending.world_drop = true;
+        }
         self.pending_world_drops = self
             .pending_world_drops
             .saturating_add(1)

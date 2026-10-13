@@ -49,6 +49,8 @@ pub(super) struct PendingRequest {
     pub(super) predicted: Vec<CellPrediction>,
     /// A mine-block request riding PlayerAuthInput rather than its own packet.
     pub(super) mining: Option<MiningPrediction>,
+    /// A drop key press with no window open, which leaves as a normal transaction.
+    pub(super) world_drop: bool,
 }
 
 /// The native sparse cell and its historic request snapshot. A later local
@@ -181,13 +183,15 @@ impl PlayerInventoryLedger {
     }
 
     /// Negative odd request ids name pending sparse cells. The cell address
-    /// distinguishes even two halves stamped by the same split request.
+    /// distinguishes even two halves stamped by the same split request. A
+    /// negative even id names what a sent drop transaction left behind.
     pub(super) fn awaiting_identity(&self, held: &Held) -> bool {
         if self.authority == Some(protocol::InventoryAuthority::Client) {
             return false;
         }
         let id = held.stack.stack_network_id;
         id <= 0
+            && !protocol::is_legacy_request_id(id)
             && !(id < -1
                 && id & 1 != 0
                 && self.queue.iter().any(|request| request.request_id == id))
@@ -621,6 +625,7 @@ impl PlayerInventoryLedger {
                 furnace_route: None,
                 predicted: Vec::new(),
                 mining: Some(MiningPrediction { slot, damage }),
+                world_drop: false,
             },
         );
         Some(request_id)

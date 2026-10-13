@@ -242,12 +242,14 @@ fn negative_stack_ids_name_prior_predictions_or_this_requests_created_output() {
         ),
         (-7, -5)
     );
-    for id in [-6, -8, -9] {
+    for id in [-8, -9] {
         assert_eq!(
             item_stack_request_packet(-7, &[take(id)]).unwrap_err(),
             InventoryPacketError::InvalidRequestStackNetworkId(id)
         );
     }
+    // An earlier drop transaction's remainder keeps that transaction's legacy id.
+    assert!(item_stack_request_packet(-7, &[take(-6)]).is_ok());
     let from_player = StackRequestAction::Take {
         amount: 1,
         source: slot(StackRequestContainer::PlayerInventory, 0, -7),

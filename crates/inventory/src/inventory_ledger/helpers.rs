@@ -35,27 +35,7 @@ impl PlayerInventoryLedger {
         request_id: i32,
     ) {
         for action in actions {
-            let (first, second) = match action {
-                StackRequestAction::Take {
-                    source,
-                    destination,
-                    ..
-                }
-                | StackRequestAction::Place {
-                    source,
-                    destination,
-                    ..
-                }
-                | StackRequestAction::Swap {
-                    source,
-                    destination,
-                } => (Some(source), Some(destination)),
-                StackRequestAction::Drop { source, .. }
-                | StackRequestAction::Destroy { source, .. }
-                | StackRequestAction::Consume { source, .. } => (Some(source), None),
-                _ => (None, None),
-            };
-            for slot in first.into_iter().chain(second) {
+            for slot in action_slots_mut(action) {
                 if slot.stack_network_id == request_id {
                     continue;
                 }
@@ -70,6 +50,20 @@ impl PlayerInventoryLedger {
                 }) {
                     slot.stack_network_id = owner.request_id;
                 }
+            }
+        }
+    }
+
+    /// Renames every queued action's reference to stack `from` as `to`.
+    pub(super) fn rename_request_dependencies(&mut self, from: i32, to: i32) {
+        for slot in self
+            .queue
+            .iter_mut()
+            .flat_map(|request| request.actions.iter_mut())
+            .flat_map(action_slots_mut)
+        {
+            if slot.stack_network_id == from {
+                slot.stack_network_id = to;
             }
         }
     }
@@ -95,6 +89,33 @@ impl PlayerInventoryLedger {
             }
         })
     }
+}
+
+/// The source and destination slots `action` names.
+fn action_slots_mut(
+    action: &mut StackRequestAction,
+) -> impl Iterator<Item = &mut StackRequestSlot> {
+    let (first, second) = match action {
+        StackRequestAction::Take {
+            source,
+            destination,
+            ..
+        }
+        | StackRequestAction::Place {
+            source,
+            destination,
+            ..
+        }
+        | StackRequestAction::Swap {
+            source,
+            destination,
+        } => (Some(source), Some(destination)),
+        StackRequestAction::Drop { source, .. }
+        | StackRequestAction::Destroy { source, .. }
+        | StackRequestAction::Consume { source, .. } => (Some(source), None),
+        _ => (None, None),
+    };
+    first.into_iter().chain(second)
 }
 
 pub(super) const fn valid_raw_window_id(window_id: i32) -> bool {

@@ -26,7 +26,8 @@ pub use creative::{
 mod client_packets;
 mod legacy;
 pub use legacy::{
-    NormalInventoryChange, NormalInventorySource, normal_inventory_transaction_packet,
+    NormalInventoryChange, NormalInventorySource, inventory_drop_transaction_packet,
+    is_legacy_request_id, normal_inventory_transaction_packet,
 };
 mod raw_scan;
 pub mod recipes;
@@ -251,6 +252,8 @@ pub enum InventoryPacketError {
     InvalidNormalTransactionActionCount(usize),
     #[error("item stack request ID must be a negative odd integer below -1")]
     InvalidStackRequestId,
+    #[error("legacy request ID {0} is not a negative even integer below -1")]
+    InvalidLegacyRequestId(i32),
     #[error("item stack request amount must be from 1 to 64")]
     InvalidStackRequestAmount,
     #[error("item stack request has {0} actions, outside 1..=100")]
@@ -372,6 +375,16 @@ impl VerifiedNetworkItemStack {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
+    }
+
+    /// The same stack under `stack_network_id`, which may name a pending request or a legacy
+    /// transaction as the native client's net id variant does; an empty stack stays unnamed.
+    #[must_use]
+    pub fn renamed(mut self, stack_network_id: i32) -> Self {
+        if !self.inner.is_empty() {
+            self.inner.stack_network_id = stack_network_id;
+        }
+        self
     }
 
     /// The stack less one item, carrying `legacy_request_id` as its net id; empty when none
