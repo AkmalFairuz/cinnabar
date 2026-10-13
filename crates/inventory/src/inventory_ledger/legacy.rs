@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use protocol::{
     NetworkItemStack, NormalInventoryChange, NormalInventorySource, Packet, StackRequestAction,
-    StackResponse, StackResponseStatus, VerifiedNetworkItemStack,
-    inventory_drop_transaction_packet, normal_inventory_transaction_packet,
+    StackResponse, VerifiedNetworkItemStack, inventory_drop_transaction_packet,
+    normal_inventory_transaction_packet,
 };
 
 use super::cells::Held;
+use super::drop_chain::{consumed_stack, same_stack_name};
 use super::gesture::Submission;
 use super::{
     Cell, InventoryGestureError, InventoryPendingState, PendingRequest, PlayerInventoryLedger,
@@ -216,137 +217,9 @@ impl PlayerInventoryLedger {
         if !self.request_is_current(&request) {
             return true;
         }
-        let backing: Vec<_> = request
-            .predicted
-            .iter()
-            .map(|prediction| {
-                (
-                    prediction.cell,
-                    self.confirmed.get(prediction.cell).cloned(),
-                )
-            })
-            .collect();
-        let owns_backing = request.predicted.iter().any(|prediction| {
-            same_stack_name(
-                self.confirmed.get(prediction.cell),
-                prediction.held.as_ref(),
-            )
-        });
-        let owns_history = request.predicted.iter().any(|source| {
-            self.committed_world_drops
-                .iter()
-                .chain(self.queue.iter())
-                .filter(|later| later.world_drop.is_some())
-                .flat_map(|later| &later.predicted)
-                .any(|prediction| {
-                    prediction.cell == source.cell
-                        && same_stack_name(prediction.before.as_ref(), source.held.as_ref())
-                })
-        });
-        if !owns_backing && !owns_history {
-            return true;
-        }
-        for prediction in &mut request.predicted {
-            prediction.active = true;
-        }
-        match response.status {
-            StackResponseStatus::Accepted => {
-                // Reconcile against this drop's snapshot, even when a later sent drop
-                // currently owns the backing cell. Restore that newer value below.
-                for prediction in &request.predicted {
-                    self.confirmed.set(prediction.cell, prediction.held.clone());
-                }
-                request.accepted = Some(Arc::clone(&response.containers));
-                self.settle(&request);
-            }
-            StackResponseStatus::Rejected => {
-                for prediction in &request.predicted {
-                    self.confirmed
-                        .set(prediction.cell, prediction.before.clone());
-                }
-            }
-            StackResponseStatus::Unknown(_) => return true,
-        }
-        for (cell, held) in backing {
-            let corrected = self.confirmed.get(cell).cloned();
-            let source = request
-                .predicted
-                .iter()
-                .find(|prediction| prediction.cell == cell)
-                .expect("backing came from this prediction");
-            self.rebase_world_drop_dependents(cell, source.held.as_ref(), corrected);
-            if !same_stack_name(held.as_ref(), source.held.as_ref()) {
-                self.confirmed.set(cell, held);
-            }
-        }
+        request.accepted = Some(Arc::clone(&response.containers));
+        self.reconcile_drop(&mut request, response.status);
         true
-    }
-
-    /// Rebases drop rollback snapshots and rebuilds unsent descriptors along their source chain.
-    fn rebase_world_drop_dependents(&mut self, cell: Cell, from: Option<&Held>, to: Option<Held>) {
-        let server_authority = self.authority == Some(protocol::InventoryAuthority::Server);
-        let mut replacements = vec![(from.cloned(), to)];
-        let mut invalid = false;
-        for request in self
-            .committed_world_drops
-            .iter_mut()
-            .chain(self.queue.iter_mut())
-            .filter(|request| request.world_drop.is_some())
-        {
-            let amount = request
-                .actions
-                .iter()
-                .find_map(|action| match action {
-                    StackRequestAction::Drop { amount, .. } => Some(u16::from(*amount)),
-                    _ => None,
-                })
-                .expect("world drops have a drop action");
-            for prediction in &mut request.predicted {
-                if prediction.cell != cell {
-                    continue;
-                }
-                let Some((_, replacement)) = replacements
-                    .iter()
-                    .rev()
-                    .find(|(old, _)| same_stack_name(prediction.before.as_ref(), old.as_ref()))
-                else {
-                    continue;
-                };
-                prediction.before = replacement.clone();
-                if request.state != InventoryPendingState::AwaitingTransport {
-                    continue;
-                }
-                let Some(before) = prediction
-                    .before
-                    .as_ref()
-                    .filter(|held| held.stack.count >= amount)
-                else {
-                    invalid = true;
-                    continue;
-                };
-                let old = prediction.held.clone();
-                prediction.held = consumed_stack(
-                    Some(before),
-                    amount,
-                    server_authority.then_some(request.request_id),
-                );
-                let name = before.stack.stack_network_id;
-                for action in &mut request.actions {
-                    if let StackRequestAction::Drop { source, .. } = action {
-                        source.stack_network_id = name;
-                    }
-                }
-                for group in &mut request.groups {
-                    if let super::overlay::DeltaGroup::Shrink { source_id, .. } = group {
-                        *source_id = name;
-                    }
-                }
-                replacements.push((old, prediction.held.clone()));
-            }
-        }
-        if invalid {
-            self.retire_legacy_write(cell);
-        }
     }
 
     /// Publishes an admitted one-item use before exact drop descriptors are built or retried.
@@ -393,7 +266,7 @@ impl PlayerInventoryLedger {
             }
         }
         self.confirmed.set(cell, after.clone());
-        self.rebase_world_drop_dependents(cell, Some(&before), after);
+        self.rebase_drop_dependents(cell, Some(&before), after);
         self.refold();
         true
     }
@@ -431,24 +304,6 @@ fn world_drop_remainder_id(request: &PendingRequest) -> i32 {
     } else {
         0
     }
-}
-
-/// Whether two retained values carry the same stack name, including an empty result.
-fn same_stack_name(left: Option<&Held>, right: Option<&Held>) -> bool {
-    left.map(|held| held.stack.stack_network_id) == right.map(|held| held.stack.stack_network_id)
-}
-
-/// Removes admitted consumption from a snapshot, optionally assigning its surviving stack a name.
-fn consumed_stack(held: Option<&Held>, amount: u16, name: Option<i32>) -> Option<Held> {
-    let mut held = held?.clone();
-    held.stack.count = held.stack.count.saturating_sub(amount);
-    if held.stack.count == 0 {
-        return None;
-    }
-    if let Some(name) = name {
-        held.stack.stack_network_id = name;
-    }
-    Some(held)
 }
 
 /// `held` as a transaction leg named `name`, else by its own id, which may be a pending

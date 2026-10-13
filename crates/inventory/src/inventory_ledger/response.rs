@@ -89,7 +89,8 @@ impl PlayerInventoryLedger {
             {
                 self.queue[index].accepted = Some(Arc::clone(&response.containers));
             } else {
-                self.queue.remove(index);
+                let mut request = self.queue.remove(index).expect("index observed");
+                self.reconcile_drop(&mut request, response.status);
             }
             self.settle_accepted_heads();
         }

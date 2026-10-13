@@ -18,6 +18,7 @@ mod crafting_close;
 #[cfg(test)]
 mod crafting_tests;
 mod distribute;
+mod drop_chain;
 mod equipment;
 #[cfg(test)]
 mod fixed_window_tests;

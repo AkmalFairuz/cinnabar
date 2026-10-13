@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use protocol::{
     CanonicalCell, ContainerIdentity, StackRequestAction, StackResponseContainer,
-    StackResponseSlot, project_container_cell,
+    StackResponseSlot, StackResponseStatus, project_container_cell,
 };
 
 use super::cells::{Cell, CellSurface, Cells, Held};
@@ -82,6 +82,16 @@ pub(super) struct MiningPrediction {
 const MAX_OUTSTANDING_MINING_REQUESTS: usize = 16;
 
 impl PendingRequest {
+    /// The decrement of a single-cell drop, shared by screen and world requests.
+    pub(super) fn drop_amount(&self) -> Option<u16> {
+        match self.actions.as_slice() {
+            [StackRequestAction::Drop { amount, .. }] if self.predicted.len() == 1 => {
+                Some(u16::from(*amount))
+            }
+            _ => None,
+        }
+    }
+
     pub(super) fn touched(&self) -> impl Iterator<Item = Cell> + '_ {
         self.groups
             .iter()
@@ -259,8 +269,10 @@ impl PlayerInventoryLedger {
             .iter()
             .position(|request| request.accepted.is_some())
         {
-            let request = self.queue.remove(index).expect("index observed");
-            self.settle(&request);
+            let mut request = self.queue.remove(index).expect("index observed");
+            if !self.reconcile_drop(&mut request, StackResponseStatus::Accepted) {
+                self.settle(&request);
+            }
         }
     }
 
@@ -354,7 +366,7 @@ impl PlayerInventoryLedger {
             self.note_unrouted_container();
             return;
         }
-        if request.world_drop.is_none() {
+        if request.drop_amount().is_none() {
             self.retire_legacy_write(cell);
             self.committed_world_drops
                 .retain(|drop| !drop.touches(cell));

@@ -135,7 +135,7 @@ fn restating_an_unrelated_slot_keeps_the_drop_queued() {
 }
 
 #[test]
-fn a_screen_request_correction_retires_a_drop_queued_on_its_source() {
+fn a_screen_request_correction_rebuilds_a_drop_queued_on_its_source() {
     let mut ledger = known_ledger(&[(2, digested(stack(6, 100, 5)))]);
     open_personal(&mut ledger);
     let screen = ledger
@@ -148,9 +148,11 @@ fn a_screen_request_correction_retires_a_drop_queued_on_its_source() {
         StackResponseStatus::Accepted,
         Some((4, 91)),
     ));
-    assert!(ledger.pending_batch().unwrap().is_none());
-    assert_eq!(ledger.displayed_stack(2).unwrap().count, 4);
-    assert_eq!(ledger.displayed_stack(2).unwrap().stack_network_id, 91);
+    let transaction = queued_transaction(&ledger);
+    assert_eq!(transaction.actions[0].from_item.count, 4);
+    assert_eq!(transaction.actions[0].from_item.stack_network_id, Some(91));
+    assert_eq!(transaction.actions[0].to_item.count, 3);
+    assert_eq!(ledger.displayed_stack(2).unwrap().count, 3);
 }
 
 #[test]
