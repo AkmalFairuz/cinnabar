@@ -43,37 +43,13 @@ impl PlayerInventoryLedger {
                     continue;
                 };
                 if let Some(owner) = self.queue.iter().rev().find(|pending| {
-                    pending
-                        .predicted
-                        .iter()
-                        .any(|prediction| prediction.cell == cell && prediction.active)
+                    !pending.locally_committed()
+                        && pending
+                            .predicted
+                            .iter()
+                            .any(|prediction| prediction.cell == cell && prediction.active)
                 }) {
                     slot.stack_network_id = owner.request_id;
-                }
-            }
-        }
-    }
-
-    /// Renames action references and retained stack descriptors from `from` to `to`.
-    pub(super) fn rename_request_dependencies(&mut self, from: i32, to: i32) {
-        for request in self
-            .queue
-            .iter_mut()
-            .chain(self.committed_world_drops.iter_mut())
-        {
-            for slot in request.actions.iter_mut().flat_map(action_slots_mut) {
-                if slot.stack_network_id == from {
-                    slot.stack_network_id = to;
-                }
-            }
-            for held in request.predicted.iter_mut().flat_map(|prediction| {
-                prediction
-                    .before
-                    .iter_mut()
-                    .chain(prediction.held.iter_mut())
-            }) {
-                if held.stack.stack_network_id == from {
-                    held.stack.stack_network_id = to;
                 }
             }
         }
@@ -103,7 +79,7 @@ impl PlayerInventoryLedger {
 }
 
 /// The source and destination slots `action` names.
-fn action_slots_mut(
+pub(super) fn action_slots_mut(
     action: &mut StackRequestAction,
 ) -> impl Iterator<Item = &mut StackRequestSlot> {
     let (first, second) = match action {

@@ -6,8 +6,8 @@ use protocol::{
 
 use super::*;
 
+mod history_tests;
 mod lifecycle;
-mod screen_chain;
 
 /// One addressed count and stack-id correction, with its requested cell unchanged.
 fn corrected_container(

@@ -18,7 +18,6 @@ mod crafting_close;
 #[cfg(test)]
 mod crafting_tests;
 mod distribute;
-mod drop_chain;
 mod equipment;
 #[cfg(test)]
 mod fixed_window_tests;
@@ -219,8 +218,7 @@ pub struct PlayerInventoryLedger {
     /// Bundle contents by dynamic container id.
     bundles: BTreeMap<u32, Vec<NetworkItemStack>>,
     queue: VecDeque<PendingRequest>,
-    /// Sent drops kept only to correlate optional legacy transaction responses.
-    committed_world_drops: VecDeque<PendingRequest>,
+    /// Admitted world-drop gestures waiting to deliver their immediate feedback.
     pending_world_drops: usize,
     next_request_id: i32,
     session_generation: u64,
@@ -267,7 +265,6 @@ impl Default for PlayerInventoryLedger {
             enchant_options: None,
             bundles: BTreeMap::new(),
             queue: VecDeque::new(),
-            committed_world_drops: VecDeque::new(),
             pending_world_drops: 0,
             next_request_id: -3,
             session_generation: 0,
@@ -427,9 +424,17 @@ impl PlayerInventoryLedger {
         self.gestures().next().map(|pending| pending.state)
     }
 
+    /// Requests still awaiting transport or a required server response.
+    fn pending_requests(&self) -> impl Iterator<Item = &PendingRequest> {
+        self.queue
+            .iter()
+            .filter(|request| !request.locally_committed())
+    }
+
     /// Queued gesture requests; mining requests ride player input instead.
     fn gestures(&self) -> impl Iterator<Item = &PendingRequest> {
-        self.queue.iter().filter(|pending| pending.mining.is_none())
+        self.pending_requests()
+            .filter(|pending| pending.mining.is_none())
     }
 
     /// The oldest unresolved request id.
@@ -485,7 +490,7 @@ impl PlayerInventoryLedger {
     }
 
     fn cell_pending(&self, cell: Cell) -> bool {
-        self.queue.iter().any(|pending| pending.touches(cell))
+        self.pending_requests().any(|pending| pending.touches(cell))
     }
 
     #[must_use]
@@ -752,8 +757,7 @@ impl PlayerInventoryLedger {
     }
 
     fn storage_request_bound(&self, generation: u64) -> bool {
-        self.queue
-            .iter()
+        self.pending_requests()
             .any(|pending| pending.storage_generation == Some(generation))
     }
 
@@ -881,8 +885,9 @@ impl PlayerInventoryLedger {
         }
         // The cursor is session-owned rather than window-owned. Only a
         // settled cursor may survive the acknowledgement of our own close.
-        let retain_confirmed_cursor =
-            retain_confirmed_cursor && self.queue.is_empty() && !self.cursor_resync_required;
+        let retain_confirmed_cursor = retain_confirmed_cursor
+            && self.gestures().next().is_none()
+            && !self.cursor_resync_required;
         self.abandon_requests(|pending| pending.personal_generation == Some(generation));
         self.personal = None;
         self.clear_window_inputs(retain_confirmed_cursor);
@@ -955,8 +960,8 @@ impl PlayerInventoryLedger {
     /// Requires a refresh independently of any abandoned request's eventual answer.
     fn mark_cell_recovery(&mut self, cell: Cell) {
         self.disown_abandoned_recovery(cell.surface());
-        self.committed_world_drops
-            .retain(|drop| !drop.touches(cell));
+        self.queue
+            .retain(|request| !request.locally_committed() || !request.touches(cell));
         if let Some(held) = self.confirmed.get_mut(cell) {
             held.overlay = None;
         }

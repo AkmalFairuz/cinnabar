@@ -1,13 +1,10 @@
-use std::sync::Arc;
-
 use protocol::{
     NetworkItemStack, NormalInventoryChange, NormalInventorySource, Packet, StackRequestAction,
-    StackResponse, VerifiedNetworkItemStack, inventory_drop_transaction_packet,
+    VerifiedNetworkItemStack, inventory_drop_transaction_packet,
     normal_inventory_transaction_packet,
 };
 
 use super::cells::Held;
-use super::drop_chain::{consumed_stack, same_stack_name};
 use super::gesture::Submission;
 use super::{
     Cell, InventoryGestureError, InventoryPendingState, PendingRequest, PlayerInventoryLedger,
@@ -17,38 +14,19 @@ impl PlayerInventoryLedger {
     /// Cancels unsent transactions whose exact source was authoritatively rewritten.
     pub(super) fn retire_legacy_write(&mut self, cell: Cell) {
         let client_authority = self.authority == Some(protocol::InventoryAuthority::Client);
-        if self.confirmed.contains(cell)
-            && self.queue.iter().any(|request| {
-                request.state == InventoryPendingState::AwaitingTransport
-                    && request.touches(cell)
-                    && (client_authority || request.world_drop.is_some())
-            })
-        {
-            self.abandon_requests(|request| {
-                request.state == InventoryPendingState::AwaitingTransport
-                    && request.touches(cell)
-                    && (client_authority || request.world_drop.is_some())
-            });
-            let mut owned = Vec::new();
-            for prediction in self
-                .queue
-                .iter_mut()
-                .rev()
-                .flat_map(|request| request.predicted.iter_mut().rev())
-            {
-                prediction.active = !owned.contains(&prediction.cell);
-                if prediction.active {
-                    owned.push(prediction.cell);
-                }
-            }
-            self.refold();
+        let cancels = |request: &PendingRequest| {
+            request.state == InventoryPendingState::AwaitingTransport
+                && request.touches(cell)
+                && (client_authority || request.world_drop.is_some())
+        };
+        if self.queue.iter().any(cancels) {
+            self.abandon_requests(cancels);
         }
     }
 
     pub(super) fn set_authoritative_cell(&mut self, cell: Cell, held: Option<Held>) -> bool {
         self.retire_legacy_write(cell);
-        self.committed_world_drops
-            .retain(|request| !request.touches(cell));
+        self.invalidate_request_sources(cell, i32::MIN);
         let written = self.confirmed.set(cell, held);
         if written {
             self.note_observed_gear(cell);
@@ -99,10 +77,12 @@ impl PlayerInventoryLedger {
         &self,
         request: &PendingRequest,
     ) -> Result<Packet, InventoryGestureError> {
-        let remainder = world_drop_remainder_id(request);
         let Some(Cell::Inventory(slot)) = request.predicted.first().map(|p| p.cell) else {
             return Err(InventoryGestureError::InvalidRequest);
         };
+        let remainder = request.predicted[0].held.as_ref().map_or(0, |_| {
+            request.world_drop.expect("world drop").legacy_request_id
+        });
         let changes = self.legacy_changes(request, Some(remainder))?;
         inventory_drop_transaction_packet(slot, (remainder != 0).then_some(remainder), changes)
             .map_err(|_| InventoryGestureError::InvalidRequest)
@@ -173,52 +153,24 @@ impl PlayerInventoryLedger {
         })
     }
 
-    /// Commits a sent drop while keeping its optional legacy response separate from pending work.
-    /// Its remainder and later requests use the transaction's legacy id.
+    /// Commits a normal drop in place, retaining even empty results as supersession history.
     pub(super) fn commit_world_drop(&mut self, index: usize) -> bool {
-        let mut request: PendingRequest = self.queue.remove(index).expect("index observed");
-        let remainder = world_drop_remainder_id(&request);
-        let current = self.request_is_current(&request);
-        if current {
-            for prediction in &mut request.predicted {
-                if let Some(held) = &mut prediction.held {
-                    held.stack.stack_network_id = remainder;
-                }
-                self.confirmed.set(prediction.cell, prediction.held.clone());
-            }
+        let request = &mut self.queue[index];
+        let remainder = request.world_drop.expect("world drop").legacy_request_id;
+        request.state = InventoryPendingState::AwaitingResponse;
+        request.transport_deadline_millis = None;
+        let request_id = request.request_id;
+        let prediction = &mut request.predicted[0];
+        let from = prediction.held.clone();
+        if let Some(held) = &mut prediction.held {
+            held.stack.stack_network_id = remainder;
         }
-        self.rename_request_dependencies(request.request_id, remainder);
-        if current && remainder != 0 {
-            request.state = InventoryPendingState::AwaitingResponse;
-            request.transport_deadline_millis = None;
-            if self.committed_world_drops.len() >= super::MAX_PENDING_REQUESTS {
-                self.committed_world_drops.pop_front();
-            }
-            self.committed_world_drops.push_back(request);
-        }
+        let cell = prediction.cell;
+        let to = prediction.held.clone();
+        self.confirmed.set(cell, to.clone());
+        self.rebase_predictions(request_id, cell, from.as_ref(), to);
         self.refold();
         self.finish_closing();
-        true
-    }
-
-    /// Reconciles one optional drop response by its emitted even id, once, without delaying play.
-    pub(super) fn apply_world_drop_response(&mut self, response: &StackResponse) -> bool {
-        let Some(index) = self.committed_world_drops.iter().position(|request| {
-            request
-                .world_drop
-                .is_some_and(|drop| drop.legacy_request_id == response.request_id)
-        }) else {
-            return false;
-        };
-        let mut request = self
-            .committed_world_drops
-            .remove(index)
-            .expect("index observed");
-        if !self.request_is_current(&request) {
-            return true;
-        }
-        request.accepted = Some(Arc::clone(&response.containers));
-        self.reconcile_drop(&mut request, response.status);
         true
     }
 
@@ -249,9 +201,9 @@ impl PlayerInventoryLedger {
         }
         let after = consumed_stack(Some(&before), 1, Some(change.to.stack_network_id()));
         for request in self
-            .committed_world_drops
+            .queue
             .iter_mut()
-            .filter(|request| request.touches(cell))
+            .filter(|request| request.locally_committed() && request.touches(cell))
         {
             let drop = request.world_drop.as_mut().expect("committed world drop");
             drop.consumed_after = drop.consumed_after.saturating_add(1);
@@ -260,13 +212,17 @@ impl PlayerInventoryLedger {
                     continue;
                 }
                 prediction.before = consumed_stack(prediction.before.as_ref(), 1, None);
-                let rename = same_stack_name(prediction.held.as_ref(), Some(&before))
-                    .then_some(change.to.stack_network_id());
+                let rename = (prediction
+                    .held
+                    .as_ref()
+                    .map(|held| held.stack.stack_network_id)
+                    == Some(before.stack.stack_network_id))
+                .then_some(change.to.stack_network_id());
                 prediction.held = consumed_stack(prediction.held.as_ref(), 1, rename);
             }
         }
         self.confirmed.set(cell, after.clone());
-        self.rebase_drop_dependents(cell, Some(&before), after);
+        self.rebase_predictions(i32::MAX, cell, Some(&before), after);
         self.refold();
         true
     }
@@ -287,22 +243,6 @@ impl PlayerInventoryLedger {
         self.refold();
         self.finish_closing();
         true
-    }
-}
-
-/// A world drop's reserved legacy id, or `0` when the slot emptied.
-fn world_drop_remainder_id(request: &PendingRequest) -> i32 {
-    let remainder = request
-        .predicted
-        .first()
-        .is_some_and(|prediction| prediction.held.is_some());
-    if remainder {
-        request
-            .world_drop
-            .expect("world drop identity")
-            .legacy_request_id
-    } else {
-        0
     }
 }
 
@@ -330,4 +270,17 @@ fn verified(held: Option<&Held>) -> Result<VerifiedNetworkItemStack, InventoryGe
     let digest = stack.nbt_digest;
     VerifiedNetworkItemStack::try_new(stack, digest)
         .map_err(|_| InventoryGestureError::InvalidRequest)
+}
+
+/// Removes admitted consumption from a snapshot, optionally renaming its surviving stack.
+fn consumed_stack(held: Option<&Held>, amount: u16, name: Option<i32>) -> Option<Held> {
+    let mut held = held?.clone();
+    held.stack.count = held.stack.count.saturating_sub(amount);
+    if held.stack.count == 0 {
+        return None;
+    }
+    if let Some(name) = name {
+        held.stack.stack_network_id = name;
+    }
+    Some(held)
 }

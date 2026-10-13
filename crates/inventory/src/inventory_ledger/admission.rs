@@ -55,7 +55,6 @@ impl PlayerInventoryLedger {
                     .is_some_and(|previous| previous != *authority)
                 {
                     self.queue.clear();
-                    self.committed_world_drops.clear();
                     self.personal = None;
                     self.settling.clear();
                     self.confirmed.set(Cell::Cursor, None);
