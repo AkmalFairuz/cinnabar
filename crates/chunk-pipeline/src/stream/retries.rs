@@ -12,6 +12,11 @@ impl WorldStream {
             collision_authoritative = false;
             self.record_normalization_error(NormalizationErrorReason::BlockMutationFailure);
         }
+        if collision_authoritative {
+            self.requests.recoveries.remove(&key);
+        } else {
+            self.schedule_sub_chunk_recovery(key);
+        }
         if !collision_authoritative {
             self.requests.collision_failures.insert(chunk);
             // Vanilla leaves an unfilled slot empty, and an empty slot lights as air.
@@ -268,6 +273,56 @@ impl WorldStream {
             }
             if !self.enqueue_exact_retry(key) {
                 self.complete_requested_sub_chunk(key, false);
+            }
+        }
+    }
+
+    /// Marks sub-chunk `key` abandoned; the next recovery pass asks for it again after a delay
+    /// that doubles each time it is abandoned, up to [`MAX_SUB_CHUNK_RECOVERY_DELAY`].
+    fn schedule_sub_chunk_recovery(&mut self, key: SubChunkKey) {
+        let recovery = self.requests.recoveries.entry(key).or_default();
+        recovery.rounds = recovery.rounds.saturating_add(1);
+        recovery.in_flight = false;
+        recovery.due = None;
+    }
+
+    /// Times newly abandoned sub-chunks from `now` and requests every one whose delay has passed
+    /// while its column is still in view; columns that left the view forget theirs.
+    pub(super) fn request_due_sub_chunk_recoveries(&mut self, now: Instant) {
+        if self.requests.recoveries.is_empty() {
+            return;
+        }
+        let mut due = Vec::new();
+        for (key, recovery) in &mut self.requests.recoveries {
+            if recovery.in_flight {
+                continue;
+            }
+            let at = *recovery.due.get_or_insert_with(|| {
+                let doublings = recovery.rounds.saturating_sub(1).min(3);
+                now + SUB_CHUNK_RECOVERY_DELAY
+                    .saturating_mul(1 << doublings)
+                    .min(MAX_SUB_CHUNK_RECOVERY_DELAY)
+            });
+            if at <= now {
+                due.push(*key);
+            }
+        }
+        let mut columns: BTreeMap<ChunkKey, Vec<i32>> = BTreeMap::new();
+        for key in due {
+            if !self.column_is_data_interesting(key.chunk()) {
+                self.requests.recoveries.remove(&key);
+                continue;
+            }
+            if let Some(recovery) = self.requests.recoveries.get_mut(&key) {
+                recovery.in_flight = true;
+            }
+            if !self.requests.is_expected(key) {
+                columns.entry(key.chunk()).or_default().push(key.y);
+            }
+        }
+        for (chunk, ys) in columns {
+            if let Some(range) = self.authority.dimension_range(chunk.dimension) {
+                self.enqueue_exact_recovery_requests(chunk, range, &ys, None);
             }
         }
     }

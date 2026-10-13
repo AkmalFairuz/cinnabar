@@ -13,6 +13,7 @@ pub(super) struct SubChunkRequests {
     pub(super) deferred_retries: VecDeque<SubChunkKey>,
     pub(super) deferred_retry_set: HashSet<SubChunkKey>,
     pub(super) deferred_recovery: VecDeque<PendingSubChunkRequest>,
+    pub(super) recoveries: HashMap<SubChunkKey, SubChunkRecovery>,
     pub(super) transport_pending: usize,
     pub(super) last_player_chunk: Option<ChunkKey>,
 }
@@ -103,6 +104,8 @@ impl SubChunkRequests {
         self.correlated_attempts
             .retain(|key, _| !chunks.contains(&key.chunk()));
         self.admitted_replies
+            .retain(|key, _| !chunks.contains(&key.chunk()));
+        self.recoveries
             .retain(|key, _| !chunks.contains(&key.chunk()));
     }
     pub(super) fn queued_retry_count(&self) -> usize {
