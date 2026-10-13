@@ -141,6 +141,7 @@ impl UiPresentationRuntime {
         }
         self.sync_artwork_set(ArtworkSet {
             paths: super::view_paths(view),
+            images: super::view_images(view),
             oversized: self.oversized_ui_textures(),
             skins,
             capes,

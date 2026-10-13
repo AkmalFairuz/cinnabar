@@ -10,7 +10,7 @@ use launcher::local_worlds::model;
 #[cfg(test)]
 mod settings_storage_flow_tests;
 
-use std::{io, path::PathBuf};
+use std::{collections::HashMap, io, path::PathBuf, sync::Arc};
 
 use launcher::install_layout::InstallLayout;
 use launcher_host::local_worlds::Manager;
@@ -20,7 +20,8 @@ use bevy::{
     window::WindowFocused,
 };
 
-use model::{Effect, Input, WorldsMenu};
+use launcher::local_worlds::world::WorldThumbnail;
+use model::{Effect, Event, Input, WorldsMenu};
 
 use client::WorldsClient;
 
@@ -37,6 +38,8 @@ pub struct LocalWorlds {
     pause_on_unfocus: bool,
     /// The pause last sent to the world.
     paused: bool,
+    /// Saved worlds' menu thumbnails by id, read as the list arrives.
+    thumbnails: HashMap<String, WorldThumbnail>,
 }
 
 impl Default for LocalWorlds {
@@ -50,6 +53,7 @@ impl Default for LocalWorlds {
             pause_menu: false,
             pause_on_unfocus: true,
             paused: false,
+            thumbnails: HashMap::new(),
         }
     }
 }
@@ -110,8 +114,52 @@ impl LocalWorlds {
     pub fn pump(&mut self) {
         let Some(client) = &self.client else { return };
         for event in client.drain() {
+            self.track_thumbnails(&event);
             let effects = self.menu.apply(event);
             self.dispatch(effects);
+        }
+    }
+
+    /// World `id`'s menu thumbnail, once one was captured.
+    #[must_use]
+    pub fn thumbnail(&self, id: &str) -> Option<WorldThumbnail> {
+        self.thumbnails.get(id).cloned()
+    }
+
+    /// Keeps `image` as world `id`'s thumbnail and saves it beside the world.
+    pub fn save_thumbnail(&mut self, id: &str, image: Vec<u8>) {
+        if let Some(manager) = &self.manager
+            && let Err(error) = manager.save_thumbnail(id, &image)
+        {
+            bevy::log::warn!(%error, "could not save the world thumbnail");
+        }
+        self.thumbnails
+            .insert(id.to_owned(), WorldThumbnail::new(id, Arc::from(image)));
+    }
+
+    /// Reads the thumbnails of worlds a list or create answer names, and forgets deleted ones.
+    fn track_thumbnails(&mut self, event: &Event) {
+        let Some(manager) = &self.manager else {
+            return;
+        };
+        let worlds = match event {
+            Event::Listed(worlds) => worlds.as_slice(),
+            Event::Created(world) | Event::Updated(world) => std::slice::from_ref(world),
+            Event::Deleted(id) => {
+                self.thumbnails.remove(id);
+                return;
+            }
+            _ => return,
+        };
+        for world in worlds {
+            if !self.thumbnails.contains_key(&world.id)
+                && let Some(image) = manager.thumbnail(&world.id)
+            {
+                self.thumbnails.insert(
+                    world.id.clone(),
+                    WorldThumbnail::new(&world.id, Arc::from(image)),
+                );
+            }
         }
     }
 
