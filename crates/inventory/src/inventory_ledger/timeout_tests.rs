@@ -118,6 +118,34 @@ fn expired_personal_cleanup_preserves_storage_and_its_inputs() {
 }
 
 #[test]
+fn timeout_requires_refresh_for_inputs_before_releasing_personal_ownership() {
+    let mut ledger = ledger_with_slot_zero();
+    assert!(ledger.request_personal_open(42));
+    assert!(ledger.mark_transport_enqueued(10));
+    let slot = *protocol::CRAFTING_INPUT_SLOTS.start();
+    let ingredient = stack(32, 2);
+    ledger.apply(&InventoryEvent::Slot(protocol::InventorySlotEvent {
+        identity: protocol::SlotIdentity {
+            container: ContainerIdentity {
+                window_id: None,
+                slot_type: Some(protocol::CONTAINER_NAME_CRAFT_INPUT),
+                dynamic_id: None,
+            },
+            slot: u16::from(slot),
+        },
+        stack: ingredient.clone(),
+        storage_item: None,
+    }));
+    assert!(!ledger.resync_required());
+    assert!(ledger.poll_timeout(10 + INVENTORY_REQUEST_TIMEOUT_MILLIS));
+    assert!(ledger.resync_required());
+    assert_eq!(
+        ledger.target_stack(InventoryTarget::Craft(slot)),
+        Some(&ingredient)
+    );
+}
+
+#[test]
 fn storage_reusing_an_expired_personal_id_cancels_unsent_cleanup() {
     for late_open_first in [false, true] {
         let mut ledger = expired_personal_ledger(false);

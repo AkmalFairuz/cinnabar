@@ -264,8 +264,7 @@ impl PlayerInventoryLedger {
             .retain(|close| close.owner.personal_generation() != Some(generation));
         self.abandon_requests(|pending| pending.personal_generation == Some(generation));
         self.held_open = None;
-        self.drop_confirmed_cursor();
-        self.refold();
+        self.clear_window_inputs(false);
         true
     }
 
